@@ -17,6 +17,7 @@ from app.config import config
 from app.models import const
 from app.models.schema import VideoConcatMode, VideoParams
 from app.services import bgm as bgm_service
+from app.services.visual_quality import inspect_video_quality
 from app.services import (
     codex_image,
     codex_oauth,
@@ -1043,6 +1044,7 @@ def generate_final_videos(
     }
     source_usage = {}
     material_selections = []
+    visual_quality_reports = []
     source_groups = (
         _get_material_source_groups(task_id, downloaded_videos)
         if (allocate_batch_materials and params.match_materials_to_script
@@ -1178,6 +1180,32 @@ def generate_final_videos(
                     "code": video_music_provider["warning_code"],
                     "video_index": index,
                 }
+            )
+
+        # Inspect actual rendered pixels after encoding. Diagnostics are
+        # deliberately non-blocking: a decoder/codec issue must not discard a
+        # successfully generated video.
+        try:
+            quality_report = inspect_video_quality(final_video_path)
+            quality_report["video_index"] = index
+            visual_quality_reports.append(quality_report)
+            task_artifacts.patch_script_data(
+                task_id, visual_quality_reports=visual_quality_reports
+            )
+            if quality_report["flags"]:
+                logger.warning(
+                    f"visual quality flags: task_id={task_id}, "
+                    f"video_index={index}, flags={quality_report['flags']}"
+                )
+                warnings.append({
+                    "code": "visual_quality_warnings",
+                    "video_index": index,
+                    "flags": quality_report["flags"],
+                })
+        except Exception as exc:
+            logger.warning(
+                f"visual quality inspection skipped: task_id={task_id}, "
+                f"video_index={index}, error={exc}"
             )
 
         final_video_paths.append(final_video_path)
