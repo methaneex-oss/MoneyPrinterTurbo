@@ -1187,11 +1187,14 @@ def generate_final_videos(
         # successfully generated video.
         try:
             quality_report = inspect_video_quality(final_video_path)
+        except Exception as exc:
+            logger.warning(
+                f"visual quality inspection skipped: task_id={task_id}, "
+                f"video_index={index}, error={exc}"
+            )
+        else:
             quality_report["video_index"] = index
             visual_quality_reports.append(quality_report)
-            task_artifacts.patch_script_data(
-                task_id, visual_quality_reports=visual_quality_reports
-            )
             if quality_report["flags"]:
                 logger.warning(
                     f"visual quality flags: task_id={task_id}, "
@@ -1202,11 +1205,18 @@ def generate_final_videos(
                     "video_index": index,
                     "flags": quality_report["flags"],
                 })
-        except Exception as exc:
-            logger.warning(
-                f"visual quality inspection skipped: task_id={task_id}, "
-                f"video_index={index}, error={exc}"
-            )
+
+            # Report persistence is auxiliary: a storage failure must not hide
+            # warnings from the live task state or change video-generation success.
+            try:
+                task_artifacts.patch_script_data(
+                    task_id, visual_quality_reports=visual_quality_reports
+                )
+            except Exception as exc:
+                logger.warning(
+                    f"failed to persist visual quality report: task_id={task_id}, "
+                    f"video_index={index}, error={exc}"
+                )
 
         final_video_paths.append(final_video_path)
         combined_video_paths.append(combined_video_path)
