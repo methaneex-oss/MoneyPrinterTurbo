@@ -644,6 +644,7 @@ def search_videos_pixabay(
                             str(v.get("id")) if v.get("id") is not None else None
                         ),
                         "source_page": _safe_public_url(v.get("pageURL")),
+                        "tags": str(v.get("tags") or ""),
                         "creator": _creator_info(
                             {
                                 "id": v.get("user_id"),
