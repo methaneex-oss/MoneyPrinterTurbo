@@ -3,6 +3,7 @@ from PIL import Image
 from app.services.scene_animation import (
     build_scene_label_card,
     first_scene_label_indices,
+    infer_scene_type,
     normalize_scene_label,
     scene_label_x,
 )
@@ -48,3 +49,18 @@ def test_scene_labels_only_appear_at_first_occurrence_of_each_query():
 
 def test_scene_labels_without_manifest_return_no_overlays():
     assert first_scene_label_indices(["shot.mp4"], None) == {}
+
+
+
+def test_scene_type_inference_selects_distinct_visual_treatments():
+    assert infer_scene_type("The difference between two systems") == "comparison"
+    assert infer_scene_type("What happened before the industrial revolution") == "timeline"
+    assert infer_scene_type("Growth reached 42 percent") == "data"
+    assert infer_scene_type("How the process works") == "explainer"
+    assert infer_scene_type("A quiet ocean at sunset") == "narrative"
+
+
+def test_scene_card_uses_type_specific_accent_and_tag():
+    comparison = build_scene_label_card("The difference between two systems", 1, 1080)
+    narrative = build_scene_label_card("A quiet ocean at sunset", 2, 1080)
+    assert comparison.getpixel((5, 60)) != narrative.getpixel((5, 60))
