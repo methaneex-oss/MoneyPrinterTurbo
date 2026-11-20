@@ -1074,6 +1074,9 @@ def generate_final_videos(
         semantic_threshold = float(
             config.app.get("local_visual_semantics_threshold", 0.20)
         )
+        if not math.isfinite(semantic_threshold):
+            semantic_threshold = 0.20
+        semantic_threshold = max(-1.0, min(1.0, semantic_threshold))
     except (TypeError, ValueError):
         semantic_threshold = 0.20
     video_music_provider = _VIDEO_MUSIC_PROVIDERS.get(params.bgm_type)
