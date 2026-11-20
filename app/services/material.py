@@ -161,6 +161,11 @@ def _material_source_record(item: MaterialInfo, local_path: str) -> dict[str, An
     source_page = _safe_public_url(source.get("source_page"))
     if isinstance(search_term, str) and search_term.strip():
         record["search_term"] = search_term.strip()
+    tags = source.get("tags")
+    if isinstance(tags, str) and tags.strip():
+        # Pixabay tags are public descriptive metadata; cap length before writing
+        # them to task artifacts so malformed provider responses stay bounded.
+        record["tags"] = tags.strip()[:500]
     if asset_id not in (None, ""):
         record["asset_id"] = str(asset_id)
     if source_page:
