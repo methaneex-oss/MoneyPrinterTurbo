@@ -794,6 +794,11 @@
     "Configure Providers": "配置",
     "Active Provider": "正在使用：{provider}",
     "No Configured Providers": "尚未配置服务商。",
-    "Provider Configuration Changed": "配置已更改，请检查该服务商的设置。"
+    "Provider Configuration Changed": "配置已更改，请检查该服务商的设置。",
+    "Possible Black Frames": "可能存在黑帧",
+    "Low Detail Frames": "画面细节不足",
+    "Repeated Visuals": "画面重复",
+    "Visual Quality Warning": "视频 {index}：技术画面检查发现以下问题：{flags}。",
+    "Semantic Visual Mismatch Warning": "视频 {index}：选中的素材可能与场景描述不匹配（{file}；余弦相似度 {score}）。请检查该片段。"
   }
 }
