@@ -1053,73 +1053,29 @@ def generate_final_videos(
         else {}
     )
 
-    # Optional local image-text matching checks downloaded footage against the
-    # scene search phrase derived from the script. The feature is inert unless
-    # enabled with an existing local model checkpoint.
+    # Semantic inspection is prepared here but only applied to source clips
+    # actually selected by the compositor for each final video.
     semantic_reports = []
-    if visual_semantics.is_enabled():
-        semantic_source_groups = _get_material_source_groups(
-            task_id, downloaded_videos
+    semantic_score_cache = {}
+    semantic_inspected_files = set()
+    semantic_enabled = visual_semantics.is_enabled()
+    semantic_source_groups = (
+        _get_material_source_groups(task_id, downloaded_videos)
+        if semantic_enabled else {}
+    )
+    try:
+        max_semantic_clips = max(
+            1,
+            min(24, int(config.app.get("local_visual_semantics_max_clips", 8))),
         )
-        try:
-            max_semantic_clips = max(
-                1,
-                min(24, int(config.app.get("local_visual_semantics_max_clips", 8))),
-            )
-        except (TypeError, ValueError):
-            max_semantic_clips = 8
-        try:
-            semantic_threshold = float(
-                config.app.get("local_visual_semantics_threshold", 0.20)
-            )
-        except (TypeError, ValueError):
-            semantic_threshold = 0.20
-
-        inspected_files = set()
-        for material_path in downloaded_videos:
-            if len(inspected_files) >= max_semantic_clips:
-                break
-            if material_path in inspected_files:
-                continue
-            scene_query = semantic_source_groups.get(material_path)
-            if not scene_query:
-                continue
-            inspected_files.add(material_path)
-            try:
-                semantic_report = visual_semantics.score_video_text(
-                    material_path, scene_query, sample_count=3
-                )
-            except Exception as exc:
-                logger.warning(
-                    "local semantic footage inspection skipped: "
-                    f"task_id={task_id}, file={path.basename(material_path)}, "
-                    f"error={type(exc).__name__}, detail={exc}"
-                )
-                continue
-            if not semantic_report:
-                continue
-            semantic_report.update({
-                "local_file": path.basename(material_path),
-                "scene_query": scene_query[:240],
-            })
-            semantic_reports.append(semantic_report)
-            if semantic_report["mean_similarity"] < semantic_threshold:
-                warnings.append({
-                    "code": "semantic_visual_mismatch",
-                    "local_file": path.basename(material_path),
-                    "similarity": semantic_report["mean_similarity"],
-                })
-
-        if semantic_reports:
-            try:
-                task_artifacts.patch_script_data(
-                    task_id, semantic_visual_reports=semantic_reports
-                )
-            except Exception as exc:
-                logger.warning(
-                    "failed to persist local semantic visual reports: "
-                    f"task_id={task_id}, error={type(exc).__name__}, detail={exc}"
-                )
+    except (TypeError, ValueError):
+        max_semantic_clips = 8
+    try:
+        semantic_threshold = float(
+            config.app.get("local_visual_semantics_threshold", 0.20)
+        )
+    except (TypeError, ValueError):
+        semantic_threshold = 0.20
     video_music_provider = _VIDEO_MUSIC_PROVIDERS.get(params.bgm_type)
     video_music_requested = (
         video_music_provider is not None
@@ -1144,14 +1100,14 @@ def generate_final_videos(
         )
         logger.info(f"\n\n## combining video: {index} => {combined_video_path}")
         used_video_paths = []
-        batch_options = (
-            {
+        # Always collect the source clips actually used. This is read-only
+        # metadata for post-composition QA; batch allocation options remain conditional.
+        batch_options = {"used_video_paths": used_video_paths}
+        if allocate_batch_materials:
+            batch_options.update({
                 "source_usage": source_usage,
                 "source_groups": source_groups,
-                "used_video_paths": used_video_paths,
-            }
-            if allocate_batch_materials else {}
-        )
+            })
         # 每条视频占 50% 进度中的一份，合成与最终编码各占一半。片段处理是
         # 合成里最耗时的部分，逐段推进这一半的进度。
         combine_share = 50 / params.video_count / 2
@@ -1171,6 +1127,62 @@ def generate_final_videos(
             ),
             **batch_options,
         )
+
+        if semantic_enabled:
+            for material_path in dict.fromkeys(used_video_paths):
+                scene_query = semantic_source_groups.get(material_path)
+                if not scene_query:
+                    continue
+                cache_key = (material_path, scene_query)
+                if cache_key not in semantic_score_cache:
+                    if (
+                        material_path not in semantic_inspected_files
+                        and len(semantic_inspected_files) >= max_semantic_clips
+                    ):
+                        continue
+                    semantic_inspected_files.add(material_path)
+                    try:
+                        semantic_score_cache[cache_key] = (
+                            visual_semantics.score_video_text(
+                                material_path, scene_query, sample_count=3
+                            )
+                        )
+                    except Exception as exc:
+                        logger.warning(
+                            "local semantic footage inspection skipped: "
+                            f"task_id={task_id}, file={path.basename(material_path)}, "
+                            f"error={type(exc).__name__}, detail={exc}"
+                        )
+                        semantic_score_cache[cache_key] = None
+
+                cached_report = semantic_score_cache[cache_key]
+                if not cached_report:
+                    continue
+                semantic_report = {
+                    **cached_report,
+                    "video_index": index,
+                    "local_file": path.basename(material_path),
+                    "scene_query": scene_query[:240],
+                }
+                semantic_reports.append(semantic_report)
+                if semantic_report["mean_similarity"] < semantic_threshold:
+                    warnings.append({
+                        "code": "semantic_visual_mismatch",
+                        "video_index": index,
+                        "local_file": path.basename(material_path),
+                        "similarity": semantic_report["mean_similarity"],
+                    })
+
+            if semantic_reports:
+                try:
+                    task_artifacts.patch_script_data(
+                        task_id, semantic_visual_reports=semantic_reports
+                    )
+                except Exception as exc:
+                    logger.warning(
+                        "failed to persist local semantic visual reports: "
+                        f"task_id={task_id}, error={type(exc).__name__}, detail={exc}"
+                    )
         if allocate_batch_materials:
             selected_sources = list(dict.fromkeys(used_video_paths))
             reused_sources = [file for file in selected_sources if source_usage.get(file, 0)]
