@@ -19,7 +19,7 @@ _STOP_WORDS = {
 def _terms(value: str) -> set[str]:
     return {
         token
-        for token in re.findall(r"[^\\W_]+", str(value or "").casefold())
+        for token in re.findall(r"[a-z0-9]+", str(value or "").casefold())
         if len(token) > 1 and token not in _STOP_WORDS
     }
 
