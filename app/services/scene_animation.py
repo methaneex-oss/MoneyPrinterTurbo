@@ -11,12 +11,34 @@ from __future__ import annotations
 import re
 
 import numpy as np
-from moviepy import CompositeVideoClip, ImageClip
+from moviepy import ColorClip, CompositeVideoClip, ImageClip
 from PIL import Image, ImageDraw, ImageFont
 
 
 _CONTROL_CHARS = re.compile(r"[\x00-\x1f\x7f-\x9f]")
 MAX_LABEL_LENGTH = 72
+_SCENE_CUES = {
+    "comparison": re.compile(r"\\b(compare|compared|versus|vs\\.?|difference|whereas|while|than)\\b", re.I),
+    "timeline": re.compile(r"\\b(before|after|then|later|earlier|first|next|finally|century|year|decade|timeline)\\b", re.I),
+    "data": re.compile(r"\\b(percent|percentage|million|billion|trillion|statistics|data|rate|growth|decline|\\d+(?:\\.\\d+)?%?)\\b", re.I),
+    "explainer": re.compile(r"\\b(how|why|because|means|works|process|causes|result|therefore)\\b", re.I),
+}
+_SCENE_ACCENTS = {
+    "narrative": (70, 211, 231, 255),
+    "comparison": (255, 190, 92, 255),
+    "timeline": (154, 139, 255, 255),
+    "data": (112, 222, 157, 255),
+    "explainer": (255, 137, 163, 255),
+}
+
+
+def infer_scene_type(label: str) -> str:
+    """Choose a lightweight visual treatment from grounded scene-heading cues."""
+    text = normalize_scene_label(label)
+    for scene_type in ("comparison", "timeline", "data", "explainer"):
+        if _SCENE_CUES[scene_type].search(text):
+            return scene_type
+    return "narrative"
 
 
 def normalize_scene_label(value: str) -> str:
@@ -114,7 +136,7 @@ def build_scene_label_card(
     small_font = _font(font_path, 17)
     title_font = _font(font_path, 34)
     scene_text = f"SCENE {max(1, int(scene_index)):02d}"
-    draw.text((34, 19), scene_text, font=small_font, fill=(104, 222, 235, 255))
+    draw.text((34, 19), scene_text, font=small_font, fill=accent)\n    type_text = scene_type.upper()\n    type_width = draw.textbbox((0, 0), type_text, font=small_font)[2]\n    draw.text((width - type_width - 28, 19), type_text, font=small_font, fill=(190, 198, 214, 255))
 
     max_text_width = width - 72
     fitted = label
