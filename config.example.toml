@@ -305,12 +305,12 @@ twelvelabs_rerank_terms = false
 
 # Optional local semantic footage inspection (no API key / API charge).
 # Install dependencies with: pip install -r requirements-visual-semantics.txt
-# Download a MobileCLIP2-S0 OpenCLIP checkpoint manually from:
-# https://huggingface.co/apple/MobileCLIP2-S0
-# Set the local checkpoint path below. The application never downloads weights.
+# Download the MIT-licensed TinyCLIP ViT-8M/16 + Text-3M checkpoint locally:
+# hf download wkcn/TinyCLIP-ViT-8M-16-Text-3M-YFCC15M --local-dir models/tinyclip
+# Point to that directory. local_files_only=true prevents runtime downloads.
 local_visual_semantics_enabled = false
-local_visual_semantics_checkpoint = ""
-local_visual_semantics_model = "MobileCLIP2-S0"
+local_visual_semantics_checkpoint = "models/tinyclip"
+local_visual_semantics_model = "TinyCLIP-ViT-8M-16-Text-3M-YFCC15M"
 # Similarity is cosine similarity, NOT a probability. Tune after reviewing reports.
 local_visual_semantics_threshold = 0.20
 # Limit per-task inspection cost; each material is sampled at three timestamps.
