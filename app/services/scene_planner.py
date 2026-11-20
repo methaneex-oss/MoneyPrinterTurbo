@@ -1,8 +1,7 @@
 """Narration-aware scene planning for the local video compositor.
 
-The planner uses the script and the actual material-source manifest. It does not
-invent facts or call an LLM: it aligns each material query with the most relevant
-script paragraph and produces a concise editorial heading for the existing renderer.
+The planner aligns material queries with the most relevant script section and
+produces concise editorial headings. It does not invent facts or call an LLM.
 """
 from __future__ import annotations
 
@@ -10,9 +9,10 @@ import re
 from typing import Any
 
 
-_CONTROL_CHARS = re.compile(r"[\\x00-\\x1f\\x7f-\\x9f]")
-_WORDS = re.compile(r"[^\\W_]+", re.UNICODE)
-_SENTENCE_END = re.compile(r"(?<=[.!?。！？])\\s+")
+_CONTROL_CHARS = re.compile(r"[\x00-\x1f\x7f-\x9f]")
+_WORDS = re.compile(r"[^\W_]+", re.UNICODE)
+_SENTENCE_END = re.compile(r"(?<=[.!?。！？])\s+")
+_STAGE_TAGS = re.compile(r"\[(?:pause|break)(?:=[^\]]+)?\]", re.IGNORECASE)
 _STOP_WORDS = {
     "a", "an", "and", "are", "as", "at", "be", "been", "but", "by",
     "for", "from", "had", "has", "have", "he", "her", "his", "in",
@@ -27,6 +27,7 @@ _MAX_HEADING_LENGTH = 72
 def _clean_text(value: Any) -> str:
     if not isinstance(value, str):
         return ""
+    value = _STAGE_TAGS.sub(" ", value)
     return " ".join(_CONTROL_CHARS.sub(" ", value).split()).strip()
 
 
@@ -40,22 +41,23 @@ def _tokens(value: str) -> set[str]:
 
 def split_script_sections(script: str) -> list[str]:
     """Split narration into usable paragraphs, with sentence fallback."""
-    cleaned = _clean_text(script)
-    if not cleaned:
+    if not isinstance(script, str) or not script.strip():
         return []
+    source = _STAGE_TAGS.sub(" ", script)
     paragraphs = [
         _clean_text(part)
-        for part in re.split(r"\\n\\s*\\n", str(script))
+        for part in re.split(r"\n\s*\n", source)
         if _clean_text(part)
     ]
     if len(paragraphs) > 1:
         return paragraphs
+    cleaned = _clean_text(source)
     sentences = [
         _clean_text(part)
         for part in _SENTENCE_END.split(cleaned)
         if _clean_text(part)
     ]
-    return sentences or [cleaned]
+    return sentences or ([cleaned] if cleaned else [])
 
 
 def _heading(paragraph: str) -> str:
@@ -67,12 +69,15 @@ def _heading(paragraph: str) -> str:
     return heading
 
 
-def _match_paragraph(query: str, paragraphs: list[str], query_index: int, query_count: int) -> str:
+def _match_paragraph(
+    query: str, paragraphs: list[str], query_index: int, query_count: int
+) -> str:
     query_tokens = _tokens(query)
     if not paragraphs:
         return _clean_text(query)
     if not query_tokens:
-        return paragraphs[min(len(paragraphs) - 1, query_index * len(paragraphs) // max(1, query_count))]
+        fallback = query_index * len(paragraphs) // max(1, query_count)
+        return paragraphs[min(len(paragraphs) - 1, fallback)]
 
     scored = []
     expected_position = query_index / max(1, query_count - 1)
@@ -85,11 +90,8 @@ def _match_paragraph(query: str, paragraphs: list[str], query_index: int, query_
         scored.append((score, -index, paragraph))
     best_score, _, best_paragraph = max(scored)
     if best_score <= 0.025:
-        fallback_index = min(
-            len(paragraphs) - 1,
-            query_index * len(paragraphs) // max(1, query_count),
-        )
-        return paragraphs[fallback_index]
+        fallback = query_index * len(paragraphs) // max(1, query_count)
+        return paragraphs[min(len(paragraphs) - 1, fallback)]
     return best_paragraph
 
 
@@ -125,6 +127,5 @@ def build_scene_labels(
             continue
         index = query_positions.get(query, 0)
         narration = _match_paragraph(query, paragraphs, index, len(queries))
-        scene = plan_scene(query, narration)
-        labels[source_path] = scene["heading"]
+        labels[source_path] = plan_scene(query, narration)["heading"]
     return labels
