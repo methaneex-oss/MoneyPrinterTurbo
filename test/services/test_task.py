@@ -119,6 +119,63 @@ class TestTaskService(unittest.TestCase):
             params.video_fit_mode,
         )
 
+    def test_semantic_footage_check_only_inspects_selected_sources(self):
+        """Semantic QA must inspect compositor-selected clips, not unused candidates."""
+        params = VideoParams(video_subject="test", video_count=1)
+        inspected = []
+
+        def fake_combine(**kwargs):
+            kwargs["used_video_paths"].append("selected.mp4")
+
+        def fake_score(video_path, scene_text, *, sample_count):
+            inspected.append((video_path, scene_text, sample_count))
+            return {
+                "model": "MobileCLIP2-S0",
+                "sample_count": sample_count,
+                "mean_similarity": 0.12,
+                "best_frame_similarity": 0.15,
+                "similarity_type": "cosine",
+            }
+
+        with (
+            patch.object(tm.visual_semantics, "is_enabled", return_value=True),
+            patch.object(
+                tm, "_get_material_source_groups",
+                return_value={
+                    "selected.mp4": "a scientist working in a laboratory",
+                    "unused.mp4": "a scientist working in a laboratory",
+                },
+            ),
+            patch.object(tm.visual_semantics, "score_video_text", side_effect=fake_score),
+            patch.object(tm.video, "combine_videos", side_effect=fake_combine),
+            patch.object(tm.video, "generate_video"),
+            patch.object(tm, "inspect_video_quality", return_value={"flags": []}),
+            patch.object(tm.task_artifacts, "patch_script_data"),
+            patch.object(tm.sm.state, "update_task"),
+        ):
+            _, _, warnings = tm.generate_final_videos(
+                task_id="semantic-selection-task",
+                params=params,
+                downloaded_videos=["selected.mp4", "unused.mp4"],
+                audio_file="audio.mp3",
+                subtitle_path="",
+                audio_duration=5,
+            )
+
+        self.assertEqual(
+            inspected,
+            [("selected.mp4", "a scientist working in a laboratory", 3)],
+        )
+        self.assertEqual(
+            warnings,
+            [{
+                "code": "semantic_visual_mismatch",
+                "video_index": 1,
+                "local_file": "selected.mp4",
+                "similarity": 0.12,
+            }],
+        )
+
     def test_stage_progress_reporter_maps_fraction_into_stage_range(self):
         """
         阶段内 0~1 的完成比例要换算到该阶段占用的进度区间，并保留任务已有的
