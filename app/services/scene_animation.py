@@ -127,10 +127,12 @@ def build_scene_label_card(
         outline=(255, 255, 255, 58),
         width=2,
     )
+    scene_type = infer_scene_type(label)
+    accent = _SCENE_ACCENTS[scene_type]
     draw.rounded_rectangle(
         (1, 1, 12, height - 2),
         radius=6,
-        fill=(70, 211, 231, 255),
+        fill=accent,
     )
 
     small_font = _font(font_path, 17)
@@ -172,13 +174,23 @@ def add_scene_label(
     card_width, card_height = card.size
     target_x = max(24, int(width * 0.045))
     target_y = max(24, int(height * 0.085))
+    card_x = lambda t: scene_label_x(t, card_width, target_x, duration)
     overlay = ImageClip(np.asarray(card)).with_duration(duration).with_position(
+        lambda t: (card_x(t), target_y)
+    )
+    # A short accent stroke sweeps across the card as it settles. This adds
+    # a second motion layer without rendering a full-frame animation per frame.
+    accent = _SCENE_ACCENTS[infer_scene_type(label)]
+    stroke_width = min(64, max(32, card_width // 10))
+    stroke = ColorClip(size=(stroke_width, 4), color=accent[:3]).with_duration(
+        min(0.8, duration)
+    ).with_position(
         lambda t: (
-            scene_label_x(t, card_width, target_x, duration),
-            target_y,
+            card_x(t) + 28 + int((card_width - stroke_width - 56) * min(1.0, t / 0.8)),
+            target_y + card_height - 13,
         )
     )
     return CompositeVideoClip(
-        [clip, overlay],
+        [clip, overlay, stroke],
         size=(width, height),
     ).with_duration(float(clip.duration))
