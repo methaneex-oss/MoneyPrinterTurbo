@@ -1059,10 +1059,10 @@ def generate_final_videos(
     semantic_score_cache = {}
     semantic_inspected_files = set()
     semantic_enabled = visual_semantics.is_enabled()
-    semantic_source_groups = (
-        _get_material_source_groups(task_id, downloaded_videos)
-        if semantic_enabled else {}
-    )
+    # The same per-scene query used for semantic QA also drives the animated
+    # chapter labels. Labels remain available even when the optional model is off.
+    scene_source_groups = _get_material_source_groups(task_id, downloaded_videos)
+    semantic_source_groups = scene_source_groups if semantic_enabled else {}
     try:
         max_semantic_clips = max(
             1,
@@ -1105,7 +1105,10 @@ def generate_final_videos(
         used_video_paths = []
         # Always collect the source clips actually used. This is read-only
         # metadata for post-composition QA; batch allocation options remain conditional.
-        batch_options = {"used_video_paths": used_video_paths}
+        batch_options = {
+            "used_video_paths": used_video_paths,
+            "scene_labels": scene_source_groups,
+        }
         if allocate_batch_materials:
             batch_options.update({
                 "source_usage": source_usage,
