@@ -1080,8 +1080,8 @@ def generate_final_videos(
     semantic_score_cache = {}
     semantic_inspected_files = set()
     semantic_enabled = visual_semantics.is_enabled()
-    # The same per-scene query used for semantic QA also drives the animated
-    # chapter labels. Labels remain available even when the optional model is off.
+    # Align each manifest query to its narration section. The resulting editorial
+    # heading drives chapter labels and supplies script context to optional QA.
     scene_source_groups = _get_material_scene_labels(task_id, downloaded_videos)
     semantic_source_groups = scene_source_groups if semantic_enabled else {}
     try:
