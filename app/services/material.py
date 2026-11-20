@@ -23,6 +23,7 @@ from PIL import Image, UnidentifiedImageError
 
 from app.config import config
 from app.models.schema import ImageMotion, MaterialInfo, VideoAspect, VideoConcatMode
+from app.services.visual_selection import rank_visual_candidates
 from app.services import (
     codex_image,
     generation_progress,
@@ -3478,7 +3479,12 @@ def _download_videos_by_script_order(
                 found_duration += item.duration
 
         if term_items:
-            candidate_groups.append((search_term, term_items))
+            # Pixabay includes descriptive tags with each result. Use them to
+            # rank candidates for this particular scene before the round-robin
+            # downloader chooses one. Providers without tags retain their
+            # original relevance order; no extra API/model call is introduced.
+            ranked_items = rank_visual_candidates(search_term, term_items)
+            candidate_groups.append((search_term, ranked_items))
 
     logger.info(
         f"found total ordered video candidates: {sum(len(items) for _, items in candidate_groups)}, "
