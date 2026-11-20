@@ -794,6 +794,11 @@
     "Configure Providers": "Configure",
     "Active Provider": "In use: {provider}",
     "No Configured Providers": "No providers configured yet.",
-    "Provider Configuration Changed": "Configuration changed. Review this provider in its settings."
+    "Provider Configuration Changed": "Configuration changed. Review this provider in its settings.",
+    "Possible Black Frames": "possible black frames",
+    "Low Detail Frames": "low-detail frames",
+    "Repeated Visuals": "repeated visuals",
+    "Visual Quality Warning": "Video {index}: technical visual checks flagged {flags}.",
+    "Semantic Visual Mismatch Warning": "Video {index}: a selected clip may not match its scene description ({file}; cosine similarity {score}). Review the footage."
   }
 }
