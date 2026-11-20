@@ -130,7 +130,7 @@ class TestTaskService(unittest.TestCase):
         def fake_score(video_path, scene_text, *, sample_count):
             inspected.append((video_path, scene_text, sample_count))
             return {
-                "model": "MobileCLIP2-S0",
+                "model": "TinyCLIP-ViT-8M-16-Text-3M-YFCC15M",
                 "sample_count": sample_count,
                 "mean_similarity": 0.12,
                 "best_frame_similarity": 0.15,
