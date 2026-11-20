@@ -2,7 +2,6 @@ from app.services.visual_quality import _frame_metrics
 
 
 def test_frame_metrics_returns_bounded_fingerprint_and_pixel_statistics():
-    from PIL import Image
     import numpy as np
 
     frame = np.zeros((64, 64, 3), dtype=np.uint8)
