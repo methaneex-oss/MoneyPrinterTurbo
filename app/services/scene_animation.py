@@ -139,7 +139,9 @@ def build_scene_label_card(
     title_font = _font(font_path, 34)
     scene_text = f"SCENE {max(1, int(scene_index)):02d}"
     draw.text((34, 19), scene_text, font=small_font, fill=accent)
-    type_text = scene_type.upper()\n    type_width = draw.textbbox((0, 0), type_text, font=small_font)[2]\n    draw.text((width - type_width - 28, 19), type_text, font=small_font, fill=(190, 198, 214, 255))
+    type_text = scene_type.upper()
+    type_width = draw.textbbox((0, 0), type_text, font=small_font)[2]
+    draw.text((width - type_width - 28, 19), type_text, font=small_font, fill=(190, 198, 214, 255))
 
     max_text_width = width - 72
     fitted = label
