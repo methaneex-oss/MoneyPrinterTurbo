@@ -2176,6 +2176,40 @@ def _render_generation_task_snapshot(task_id, task):
                     index=warning.get("video_index", "")
                 )
             )
+        elif (
+            isinstance(warning, Mapping)
+            and warning.get("code") == "visual_quality_warnings"
+        ):
+            labels = {
+                "possible_black_frames": tr("Possible Black Frames"),
+                "low_detail_frames": tr("Low Detail Frames"),
+                "repeated_visuals": tr("Repeated Visuals"),
+            }
+            flags = ", ".join(
+                labels.get(flag, str(flag))
+                for flag in warning.get("flags", [])
+            )
+            st.warning(
+                tr("Visual Quality Warning").format(
+                    index=warning.get("video_index", ""),
+                    flags=flags,
+                )
+            )
+        elif (
+            isinstance(warning, Mapping)
+            and warning.get("code") == "semantic_visual_mismatch"
+        ):
+            try:
+                score = f"{float(warning.get('similarity')):.3f}"
+            except (TypeError, ValueError):
+                score = str(warning.get("similarity", "n/a"))
+            st.warning(
+                tr("Semantic Visual Mismatch Warning").format(
+                    index=warning.get("video_index", ""),
+                    file=warning.get("local_file", ""),
+                    score=score,
+                )
+            )
         else:
             st.warning(str(warning))
 
