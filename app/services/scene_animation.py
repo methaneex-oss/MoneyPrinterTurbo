@@ -30,6 +30,23 @@ def normalize_scene_label(value: str) -> str:
     return value
 
 
+def first_scene_label_indices(
+    source_paths: list[str],
+    scene_labels: dict[str, str] | None,
+) -> dict[int, str]:
+    """Return one label at the first timeline occurrence of each scene query."""
+    if not isinstance(scene_labels, dict):
+        return {}
+    selected: dict[int, str] = {}
+    seen_queries: set[str] = set()
+    for index, source_path in enumerate(source_paths):
+        label = scene_labels.get(source_path)
+        if isinstance(label, str) and label and label not in seen_queries:
+            selected[index] = label
+            seen_queries.add(label)
+    return selected
+
+
 def scene_label_x(
     time_seconds: float,
     card_width: int,
