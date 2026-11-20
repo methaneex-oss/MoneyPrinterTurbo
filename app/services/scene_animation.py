@@ -8,8 +8,6 @@ moving editorial cue instead of leaving the result as a raw clip sequence.
 
 from __future__ import annotations
 
-import math
-import os
 import re
 
 import numpy as np
@@ -17,7 +15,7 @@ from moviepy import CompositeVideoClip, ImageClip
 from PIL import Image, ImageDraw, ImageFont
 
 
-_CONTROL_CHARS = re.compile(r"[\\x00-\\x1f\\x7f-\\x9f]")
+_CONTROL_CHARS = re.compile(r"[\x00-\x1f\x7f-\x9f]")
 MAX_LABEL_LENGTH = 72
 
 
