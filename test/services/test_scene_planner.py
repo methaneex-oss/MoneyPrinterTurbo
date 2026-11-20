@@ -6,7 +6,7 @@ from app.services.scene_planner import (
 
 
 def test_split_script_sections_uses_paragraph_boundaries():
-    assert split_script_sections("First section.\\n\\nSecond section.") == [
+    assert split_script_sections("First section.\n\nSecond section.") == [
         "First section.",
         "Second section.",
     ]
@@ -28,7 +28,7 @@ def test_plan_scene_heading_is_grounded_in_narration():
 
 def test_build_scene_labels_aligns_queries_to_relevant_script_sections():
     script = (
-        "Ancient forests store carbon and support biodiversity.\\n\\n"
+        "Ancient forests store carbon and support biodiversity.\n\n"
         "Modern cities use transport networks to move millions of people."
     )
     labels = build_scene_labels(
@@ -44,7 +44,7 @@ def test_build_scene_labels_aligns_queries_to_relevant_script_sections():
 
 def test_build_scene_labels_has_chronological_fallback_for_unmatched_queries():
     labels = build_scene_labels(
-        "Opening section about a journey.\\n\\nClosing section about arrival.",
+        "Opening section about a journey.\n\nClosing section about arrival.",
         {"/clips/one.mp4": "unrelated alpha", "/clips/two.mp4": "unrelated beta"},
     )
     assert labels["/clips/one.mp4"].startswith("Opening section")
@@ -54,3 +54,11 @@ def test_build_scene_labels_has_chronological_fallback_for_unmatched_queries():
 def test_empty_and_malformed_inputs_are_safe():
     assert build_scene_labels("", None) == {}
     assert build_scene_labels("Some narration.", {"/clip.mp4": ""}) == {}
+
+
+def test_stage_directions_do_not_leak_into_scene_headings():
+    labels = build_scene_labels(
+        "Opening scene [pause=1] introduces the subject.",
+        {"/clips/opening.mp4": "opening subject"},
+    )
+    assert labels["/clips/opening.mp4"] == "Opening scene introduces the subject."
