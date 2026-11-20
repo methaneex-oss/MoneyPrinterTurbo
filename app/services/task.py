@@ -1081,10 +1081,10 @@ def generate_final_videos(
                 break
             if material_path in inspected_files:
                 continue
-            inspected_files.add(material_path)
             scene_query = semantic_source_groups.get(material_path)
             if not scene_query:
                 continue
+            inspected_files.add(material_path)
             try:
                 semantic_report = visual_semantics.score_video_text(
                     material_path, scene_query, sample_count=3
