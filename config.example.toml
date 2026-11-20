@@ -304,9 +304,9 @@ twelvelabs_rerank_terms = false
 # twelvelabs_pegasus_model = "pegasus1.5"
 
 # Optional local semantic footage inspection (no API key / API charge).
-# Install dependencies with: uv sync --extra visual_semantics
+# Install dependencies with: pip install -r requirements-visual-semantics.txt
 # Download a MobileCLIP2-S0 OpenCLIP checkpoint manually from:
-# https://huggingface.co/timm/MobileCLIP2-S0-OpenCLIP
+# https://huggingface.co/apple/MobileCLIP2-S0
 # Set the local checkpoint path below. The application never downloads weights.
 local_visual_semantics_enabled = false
 local_visual_semantics_checkpoint = ""
