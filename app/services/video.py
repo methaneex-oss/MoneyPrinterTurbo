@@ -1159,7 +1159,12 @@ def combine_videos(
             )
             if scene_label:
                 clip = scene_animation.add_scene_label(
-                    clip, scene_label, scene_index=index + 1
+                    clip,
+                    scene_label,
+                    scene_index=index + 1,
+                    font_path=os.path.join(
+                        utils.font_dir(), "MicrosoftYaHeiBold.ttc"
+                    ),
                 )
 
             shuffle_side = random.choice(["left", "right", "top", "bottom"])
