@@ -43,6 +43,7 @@ from app.models.schema import (
     VideoTransitionMode,
 )
 from app.services import bgm as bgm_service
+from app.services import scene_animation
 from app.services.utils import subtitle_shaping, video_effects
 from app.utils import file_security, logging_utils, utils
 from app.utils.subtitle_reader import moviepy_subtitles
@@ -991,6 +992,7 @@ def combine_videos(
     video_fit_mode: VideoFitMode = VideoFitMode.cover,
     source_usage: dict[str, int] | None = None,
     source_groups: dict[str, str] | None = None,
+    scene_labels: dict[str, str] | None = None,
     used_video_paths: List[str] | None = None,
     progress_callback: Callable[[float], None] | None = None,
 ) -> str:
@@ -1146,6 +1148,18 @@ def combine_videos(
                     target_width=video_width,
                     target_height=video_height,
                     fit_mode=fit_mode,
+                )
+
+            # Add a lightweight animated chapter tag to stock footage when the
+            # source manifest provides a scene query. This is local motion design:
+            # no paid image/video generation service or additional model is used.
+            scene_label = (
+                scene_labels.get(subclipped_item.source_file_path)
+                if isinstance(scene_labels, dict) else None
+            )
+            if scene_label:
+                clip = scene_animation.add_scene_label(
+                    clip, scene_label, scene_index=index + 1
                 )
 
             shuffle_side = random.choice(["left", "right", "top", "bottom"])
