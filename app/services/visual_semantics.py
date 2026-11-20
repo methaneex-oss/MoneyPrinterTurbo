@@ -11,8 +11,6 @@ import math
 import os
 from typing import Any
 
-from loguru import logger
-
 from app.config import config
 
 
