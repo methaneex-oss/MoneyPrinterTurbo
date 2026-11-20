@@ -6193,6 +6193,7 @@ def _render_video_settings(panel, params):
 
             params.match_materials_to_script = st.checkbox(
                 tr("Match Materials to Script Order"),
+                value=bool(config.app.get("match_materials_to_script", False)),
                 help=tr("Match Materials to Script Order Help"),
                 key="match_materials_to_script",
                 on_change=sync_script_order_concat_mode,
