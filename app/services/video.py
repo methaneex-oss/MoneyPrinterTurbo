@@ -1098,17 +1098,12 @@ def combine_videos(
         **({"source_usage": source_usage, "source_groups": source_groups}
            if source_usage is not None else {}),
     )
-    # Show a chapter tag once per distinct script query, at its first appearance.
-    # Repeating the same lower-third on every stock shot looks like a template,
-    # not editorial storytelling.
-    scene_label_by_index: dict[int, str] = {}
-    seen_scene_queries: set[str] = set()
-    if isinstance(scene_labels, dict):
-        for item_index, item in enumerate(subclipped_items):
-            label = scene_labels.get(item.source_file_path)
-            if label and label not in seen_scene_queries:
-                scene_label_by_index[item_index] = label
-                seen_scene_queries.add(label)
+    # A chapter tag appears only at the first timeline occurrence of each
+    # distinct query; repeating it on every stock shot feels templated.
+    scene_label_by_index = scene_animation.first_scene_label_indices(
+        [item.source_file_path for item in subclipped_items],
+        scene_labels,
+    )
 
     # Sequential mode appends its later slices after this index. They only fill
     # narration that the first slices leave uncovered.
