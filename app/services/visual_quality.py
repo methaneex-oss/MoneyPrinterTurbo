@@ -29,6 +29,13 @@ def _frame_metrics(frame: Any) -> tuple[float, float, float, int]:
     return brightness, contrast, edge_activity, fingerprint
 
 
+def _frames_are_near_duplicates(first: tuple, second: tuple) -> bool:
+    """Compare perceptual structure and luminance to avoid black/white collisions."""
+    brightness_delta = abs(first[0] - second[0])
+    hash_distance = (first[3] ^ second[3]).bit_count()
+    return brightness_delta <= 16 and hash_distance <= 3
+
+
 def inspect_video_quality(video_path: str, sample_count: int = 12) -> dict:
     """Sample frames and report black/flat frames and near-duplicate samples."""
     sample_count = max(2, min(int(sample_count), 24))
@@ -56,8 +63,7 @@ def inspect_video_quality(video_path: str, sample_count: int = 12) -> dict:
     for index in range(1, len(metrics)):
         previous = metrics[index - 1][3]
         current = metrics[index][3]
-        distance = (previous ^ current).bit_count()
-        if distance <= 3:
+        if _frames_are_near_duplicates(metrics[index - 1], metrics[index]):
             duplicate_pairs += 1
             duplicate_sample_indices.update((index - 1, index))
 
