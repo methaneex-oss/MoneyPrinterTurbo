@@ -6,10 +6,9 @@ so the pipeline can report actionable warnings without blocking video delivery.
 """
 from __future__ import annotations
 
-from collections import Counter
 from typing import Any
 
-from PIL import Image, ImageStat, ImageFilter
+from PIL import Image, ImageFilter, ImageStat
 from moviepy.video.io.VideoFileClip import VideoFileClip
 
 
