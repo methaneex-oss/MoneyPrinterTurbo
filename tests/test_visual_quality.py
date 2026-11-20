@@ -24,3 +24,13 @@ def test_uniform_black_frame_is_low_detail():
     assert brightness == 0
     assert contrast == 0
     assert edge_activity == 0
+
+
+def test_perceptual_hash_does_not_treat_black_and_white_as_duplicates():
+    from app.services.visual_quality import _frames_are_near_duplicates
+    import numpy as np
+
+    black = _frame_metrics(np.zeros((32, 32, 3), dtype=np.uint8))
+    white = _frame_metrics(np.full((32, 32, 3), 255, dtype=np.uint8))
+    assert not _frames_are_near_duplicates(black, white)
+    assert _frames_are_near_duplicates(black, black)
