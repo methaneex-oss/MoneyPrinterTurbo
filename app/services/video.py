@@ -1098,6 +1098,18 @@ def combine_videos(
         **({"source_usage": source_usage, "source_groups": source_groups}
            if source_usage is not None else {}),
     )
+    # Show a chapter tag once per distinct script query, at its first appearance.
+    # Repeating the same lower-third on every stock shot looks like a template,
+    # not editorial storytelling.
+    scene_label_by_index: dict[int, str] = {}
+    seen_scene_queries: set[str] = set()
+    if isinstance(scene_labels, dict):
+        for item_index, item in enumerate(subclipped_items):
+            label = scene_labels.get(item.source_file_path)
+            if label and label not in seen_scene_queries:
+                scene_label_by_index[item_index] = label
+                seen_scene_queries.add(label)
+
     # Sequential mode appends its later slices after this index. They only fill
     # narration that the first slices leave uncovered.
     first_item_count = len(subclipped_items)
@@ -1153,10 +1165,7 @@ def combine_videos(
             # Add a lightweight animated chapter tag to stock footage when the
             # source manifest provides a scene query. This is local motion design:
             # no paid image/video generation service or additional model is used.
-            scene_label = (
-                scene_labels.get(subclipped_item.source_file_path)
-                if isinstance(scene_labels, dict) else None
-            )
+            scene_label = scene_label_by_index.get(index)
             if scene_label:
                 clip = scene_animation.add_scene_label(
                     clip,
@@ -2034,16 +2043,16 @@ _ZOOM_CACHE_TAG = "-smooth"
 
 def _smooth_zoom_clip(clip, zoom_amount: float):
     """
-    以亚像素精度生成缓慢放大的片段，画布尺寸保持不变。
+    以亚像素精度生成缓慢推近并轻微平移的片段，画布尺寸保持不变。
 
     旧实现 `clip.resized(lambda t: ...)` 每帧把图片缩放到整数尺寸，再按整数
     偏移居中裁切。放大速度很慢时（每秒约 3%），相邻帧的尺寸要么不变、要么
     跳 1px，中心偏移也随取整来回摆动，成片里表现为画面抖动/顿挫，放大到
     1080x1920 后更明显。
 
-    这里固定输出尺寸，每帧以图片中心为原点做仿射变换（BICUBIC 插值），
-    缩放比例随时间连续变化。构图与旧实现一致：从原图开始，以中心为基准
-    放大并裁掉超出画布的部分。带透明通道的图片同样处理遮罩。
+    这里固定输出尺寸，每帧使用仿射变换（BICUBIC 插值），缩放和平移
+    随时间连续变化。轻微的内容确定性镜头漂移让静态素材具有不同的运动方向，
+    同时保留足够裁切余量。带透明通道的图片同样处理遮罩。
     """
     base = Image.fromarray(np.asarray(clip.get_frame(0)).astype("uint8"))
     width, height = base.size
@@ -2054,13 +2063,25 @@ def _smooth_zoom_clip(clip, zoom_amount: float):
         mask_frame = np.asarray(clip.mask.get_frame(0)) * 255
         mask_base = Image.fromarray(mask_frame.clip(0, 255).astype("uint8"))
 
+    # Give each still a restrained, deterministic camera path. A small
+    # diagonal drift prevents every generated image from feeling like the same
+    # centered Ken Burns preset; the zoom provides enough crop margin to avoid
+    # exposing empty edges during the pan.
+    motion_seed = hashlib.sha256(base.tobytes()).digest()
+    pan_x = ((motion_seed[0] / 255.0) * 2.0 - 1.0) * width * 0.012
+    pan_y = ((motion_seed[1] / 255.0) * 2.0 - 1.0) * height * 0.012
+
     def warp(image, t, resample):
-        progress = min(max(t, 0.0), duration) / duration
+        linear_progress = min(max(t, 0.0), duration) / duration
+        # Smooth acceleration/deceleration avoids a visible camera stop at cuts.
+        progress = linear_progress * linear_progress * (3.0 - 2.0 * linear_progress)
         scale = 1.0 + zoom_amount * progress
-        # 输出像素 (x, y) 取自原图 (cx + (x - cx) / s, cy + (y - cy) / s)。
+        offset_x = pan_x * progress
+        offset_y = pan_y * progress
+        # Output pixels sample a continuously moving, slightly enlarged source.
         coefficients = (
-            1 / scale, 0, center_x - center_x / scale,
-            0, 1 / scale, center_y - center_y / scale,
+            1 / scale, 0, center_x - center_x / scale + offset_x,
+            0, 1 / scale, center_y - center_y / scale + offset_y,
         )
         return image.transform(
             (width, height), Image.AFFINE, coefficients, resample=resample
