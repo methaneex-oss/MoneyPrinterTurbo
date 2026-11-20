@@ -18,10 +18,10 @@ from PIL import Image, ImageDraw, ImageFont
 _CONTROL_CHARS = re.compile(r"[\x00-\x1f\x7f-\x9f]")
 MAX_LABEL_LENGTH = 72
 _SCENE_CUES = {
-    "comparison": re.compile(r"\\b(compare|compared|versus|vs\\.?|difference|whereas|while|than)\\b", re.I),
-    "timeline": re.compile(r"\\b(before|after|then|later|earlier|first|next|finally|century|year|decade|timeline)\\b", re.I),
-    "data": re.compile(r"\\b(percent|percentage|million|billion|trillion|statistics|data|rate|growth|decline|\\d+(?:\\.\\d+)?%?)\\b", re.I),
-    "explainer": re.compile(r"\\b(how|why|because|means|works|process|causes|result|therefore)\\b", re.I),
+    "comparison": re.compile(r"\b(compare|compared|versus|vs\.?|difference|whereas|while|than)\b", re.I),
+    "timeline": re.compile(r"\b(before|after|then|later|earlier|first|next|finally|century|year|decade|timeline)\b", re.I),
+    "data": re.compile(r"\b(percent|percentage|million|billion|trillion|statistics|data|rate|growth|decline|\d+(?:\.\d+)?%?)\b", re.I),
+    "explainer": re.compile(r"\b(how|why|because|means|works|process|causes|result|therefore)\b", re.I),
 }
 _SCENE_ACCENTS = {
     "narrative": (70, 211, 231, 255),
