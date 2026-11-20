@@ -60,11 +60,6 @@ Issues = "https://github.com/harry0703/MoneyPrinterTurbo/issues"
 twelvelabs = [
     "twelvelabs>=1.2.8",
 ]
-# Optional local image-text matching for semantic footage QA.
-# Install only when explicitly enabling the feature; PyTorch is a large dependency.
-visual_semantics = [
-    "open-clip-torch>=3.2.0,<4",
-]
 
 [dependency-groups]
 dev = [
