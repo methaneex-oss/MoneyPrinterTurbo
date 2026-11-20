@@ -1,8 +1,8 @@
 """Optional local image-text semantic checks for downloaded video materials.
 
-The feature is opt-in and requires a user-supplied, locally cached MobileCLIP2-S0
-checkpoint. It never downloads model weights automatically and never blocks video
-generation. Similarity is a retrieval signal, not a calibrated probability.
+The feature is opt-in and uses the MIT-licensed TinyCLIP checkpoint from a local
+directory. Model files are never downloaded automatically and inspection never
+blocks video generation. Similarity is a retrieval signal, not a probability.
 """
 from __future__ import annotations
 
@@ -14,15 +14,29 @@ from typing import Any
 from app.config import config
 
 
-DEFAULT_MODEL_NAME = "MobileCLIP2-S0"
+DEFAULT_MODEL_NAME = "TinyCLIP-ViT-8M-16-Text-3M-YFCC15M"
+
+
+def _checkpoint_directory() -> str:
+    value = str(config.app.get("local_visual_semantics_checkpoint", "") or "").strip()
+    return os.path.abspath(os.path.expanduser(value)) if value else ""
 
 
 def is_enabled() -> bool:
-    """Return true only when explicitly enabled with an existing checkpoint."""
+    """Require explicit opt-in and a complete local Transformers checkpoint."""
     if not config.app.get("local_visual_semantics_enabled", False):
         return False
-    checkpoint = str(config.app.get("local_visual_semantics_checkpoint", "") or "").strip()
-    return bool(checkpoint and os.path.isfile(os.path.expanduser(checkpoint)))
+    checkpoint_dir = _checkpoint_directory()
+    has_weights = checkpoint_dir and any(
+        os.path.isfile(os.path.join(checkpoint_dir, filename))
+        for filename in ("model.safetensors", "pytorch_model.bin")
+    )
+    return bool(
+        checkpoint_dir
+        and os.path.isdir(checkpoint_dir)
+        and os.path.isfile(os.path.join(checkpoint_dir, "config.json"))
+        and has_weights
+    )
 
 
 def cosine_similarity(first: list[float], second: list[float]) -> float:
@@ -40,28 +54,22 @@ def cosine_similarity(first: list[float], second: list[float]) -> float:
 
 
 @lru_cache(maxsize=1)
-def _load_model(checkpoint_path: str, model_name: str):
-    """Load an explicitly supplied local checkpoint; no model hub lookup occurs."""
-    import open_clip
+def _load_model(checkpoint_dir: str, model_name: str):
+    """Load only local checkpoint files; local_files_only prevents hub downloads."""
     import torch
+    from transformers import CLIPModel, CLIPProcessor
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
-    # MobileCLIP2-S0 uses identity image normalization in Apple's reference
-    # inference path; OpenCLIP's generic CLIP defaults would shift its inputs.
-    model_kwargs = (
-        {"image_mean": (0, 0, 0), "image_std": (1, 1, 1)}
-        if model_name.startswith("MobileCLIP2-")
-        else {}
-    )
-    model, _, preprocess = open_clip.create_model_and_transforms(
-        model_name,
-        pretrained=checkpoint_path,
-        device=device,
-        **model_kwargs,
+    model = CLIPModel.from_pretrained(
+        checkpoint_dir,
+        local_files_only=True,
+    ).to(device)
+    processor = CLIPProcessor.from_pretrained(
+        checkpoint_dir,
+        local_files_only=True,
     )
     model.eval()
-    tokenizer = open_clip.get_tokenizer(model_name)
-    return torch, model, preprocess, tokenizer, device
+    return torch, model, processor, device
 
 
 def score_video_text(
@@ -70,7 +78,7 @@ def score_video_text(
     *,
     sample_count: int = 3,
 ) -> dict[str, Any] | None:
-    """Compare sampled video frames with a scene description using MobileCLIP.
+    """Compare sampled video frames with a scene description using TinyCLIP.
 
     Returns mean and best-frame cosine similarities. Returns None when disabled;
     model/runtime errors are isolated by the caller so rendering can continue.
@@ -78,16 +86,15 @@ def score_video_text(
     if not is_enabled() or not scene_text or not scene_text.strip():
         return None
 
-    checkpoint = os.path.abspath(
-        os.path.expanduser(str(config.app["local_visual_semantics_checkpoint"]))
-    )
+    checkpoint_dir = _checkpoint_directory()
     model_name = str(
         config.app.get("local_visual_semantics_model", DEFAULT_MODEL_NAME)
         or DEFAULT_MODEL_NAME
     )
-    torch, model, preprocess, tokenizer, device = _load_model(checkpoint, model_name)
+    torch, model, processor, device = _load_model(checkpoint_dir, model_name)
 
     from moviepy.video.io.VideoFileClip import VideoFileClip
+    from PIL import Image
 
     sample_count = max(1, min(int(sample_count), 5))
     clip = VideoFileClip(video_path, audio=False)
@@ -95,28 +102,33 @@ def score_video_text(
         duration = float(clip.duration or 0)
         if duration <= 0:
             raise ValueError("video has no positive duration")
-        # Avoid codec-sensitive endpoints and distribute samples across the clip.
         margin = min(0.05, duration / 20)
         timestamps = [
             margin + (duration - 2 * margin) * (index + 1) / (sample_count + 1)
             for index in range(sample_count)
         ]
-        from PIL import Image
-
         images = [
-            preprocess(Image.fromarray(clip.get_frame(timestamp)).convert("RGB"))
+            Image.fromarray(clip.get_frame(timestamp)).convert("RGB")
             for timestamp in timestamps
         ]
     finally:
         clip.close()
 
-    image_batch = torch.stack(images).to(device)
-    text_batch = tokenizer([f"A video frame showing {scene_text.strip()}."]).to(device)
+    inputs = processor(
+        text=[f"A video frame showing {scene_text.strip()}."],
+        images=images,
+        return_tensors="pt",
+        padding=True,
+    )
+    inputs = {name: value.to(device) for name, value in inputs.items()}
     with torch.inference_mode():
-        image_features = model.encode_image(image_batch)
-        text_features = model.encode_text(text_batch)
-        image_features = image_features / image_features.norm(dim=-1, keepdim=True)
-        text_features = text_features / text_features.norm(dim=-1, keepdim=True)
+        outputs = model(**inputs)
+        image_features = torch.nn.functional.normalize(
+            outputs.image_embeds, dim=-1
+        )
+        text_features = torch.nn.functional.normalize(
+            outputs.text_embeds, dim=-1
+        )
         scores = (image_features @ text_features.T).squeeze(-1).detach().cpu().tolist()
 
     if isinstance(scores, (int, float)):
