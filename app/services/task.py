@@ -33,6 +33,7 @@ from app.services import (
     ofox,
     sonilo,
     subtitle,
+    scene_planner,
     task_artifacts,
     twelvelabs,
     useapi,
@@ -1025,6 +1026,26 @@ def _get_material_source_groups(task_id: str, video_paths: list[str]) -> dict[st
         return {}
 
 
+
+def _get_material_scene_labels(task_id: str, video_paths: list[str]) -> dict[str, str]:
+    """Build narration-aware editorial labels for the actual downloaded sources."""
+    source_groups = _get_material_source_groups(task_id, video_paths)
+    if not source_groups:
+        return {}
+    try:
+        with open(
+            path.join(utils.task_dir(task_id), "script.json"), encoding="utf-8"
+        ) as file:
+            payload = json.load(file)
+        script = payload.get("script", "") if isinstance(payload, dict) else ""
+        return scene_planner.build_scene_labels(script, source_groups)
+    except (OSError, ValueError, AttributeError, TypeError) as exc:
+        logger.warning(
+            f"Cannot build narration-aware scene labels: task_id={task_id}, error={exc}"
+        )
+        return source_groups
+
+
 def generate_final_videos(
     task_id, params, downloaded_videos, audio_file, subtitle_path, audio_duration,
     *, partial_results: dict | None = None,
@@ -1061,7 +1082,7 @@ def generate_final_videos(
     semantic_enabled = visual_semantics.is_enabled()
     # The same per-scene query used for semantic QA also drives the animated
     # chapter labels. Labels remain available even when the optional model is off.
-    scene_source_groups = _get_material_source_groups(task_id, downloaded_videos)
+    scene_source_groups = _get_material_scene_labels(task_id, downloaded_videos)
     semantic_source_groups = scene_source_groups if semantic_enabled else {}
     try:
         max_semantic_clips = max(
