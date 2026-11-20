@@ -2,6 +2,7 @@ from PIL import Image
 
 from app.services.scene_animation import (
     build_scene_label_card,
+    first_scene_label_indices,
     normalize_scene_label,
     scene_label_x,
 )
@@ -27,3 +28,23 @@ def test_scene_label_slides_in_holds_and_slides_out():
     assert scene_label_x(0, card_width, target_x, duration) == -card_width
     assert scene_label_x(0.5, card_width, target_x, duration) == target_x
     assert scene_label_x(1.99, card_width, target_x, duration) < -card_width + 10
+
+
+
+def test_scene_labels_only_appear_at_first_occurrence_of_each_query():
+    paths = ["shot-a.mp4", "shot-b.mp4", "shot-c.mp4", "shot-d.mp4"]
+    labels = {
+        "shot-a.mp4": "ocean waves",
+        "shot-b.mp4": "ocean waves",
+        "shot-c.mp4": "city skyline",
+        "shot-d.mp4": "ocean waves",
+    }
+
+    assert first_scene_label_indices(paths, labels) == {
+        0: "ocean waves",
+        2: "city skyline",
+    }
+
+
+def test_scene_labels_without_manifest_return_no_overlays():
+    assert first_scene_label_indices(["shot.mp4"], None) == {}
