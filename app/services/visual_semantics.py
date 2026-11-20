@@ -48,10 +48,18 @@ def _load_model(checkpoint_path: str, model_name: str):
     import torch
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
+    # MobileCLIP2-S0 uses identity image normalization in Apple's reference
+    # inference path; OpenCLIP's generic CLIP defaults would shift its inputs.
+    model_kwargs = (
+        {"image_mean": (0, 0, 0), "image_std": (1, 1, 1)}
+        if model_name.startswith("MobileCLIP2-")
+        else {}
+    )
     model, _, preprocess = open_clip.create_model_and_transforms(
         model_name,
         pretrained=checkpoint_path,
         device=device,
+        **model_kwargs,
     )
     model.eval()
     tokenizer = open_clip.get_tokenizer(model_name)
