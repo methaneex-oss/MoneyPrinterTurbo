@@ -23,7 +23,7 @@ def _frame_metrics(frame: Any) -> tuple[float, float, float, int]:
     edge_activity = float(ImageStat.Stat(edges).mean[0])
 
     tiny = image.resize((8, 8), Image.Resampling.LANCZOS)
-    pixels = list(tiny.getdata())
+    pixels = list(tiny.get_flattened_data())
     average = sum(pixels) / len(pixels)
     fingerprint = sum(1 << index for index, value in enumerate(pixels) if value >= average)
     return brightness, contrast, edge_activity, fingerprint
