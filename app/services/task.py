@@ -37,6 +37,7 @@ from app.services import (
     twelvelabs,
     useapi,
     video,
+    visual_semantics,
     volcengine_seedance,
     voice,
 )
@@ -1051,6 +1052,74 @@ def generate_final_videos(
             and params.video_source != "local")
         else {}
     )
+
+    # Optional local image-text matching checks downloaded footage against the
+    # scene search phrase derived from the script. The feature is inert unless
+    # enabled with an existing local model checkpoint.
+    semantic_reports = []
+    if visual_semantics.is_enabled():
+        semantic_source_groups = _get_material_source_groups(
+            task_id, downloaded_videos
+        )
+        try:
+            max_semantic_clips = max(
+                1,
+                min(24, int(config.app.get("local_visual_semantics_max_clips", 8))),
+            )
+        except (TypeError, ValueError):
+            max_semantic_clips = 8
+        try:
+            semantic_threshold = float(
+                config.app.get("local_visual_semantics_threshold", 0.20)
+            )
+        except (TypeError, ValueError):
+            semantic_threshold = 0.20
+
+        inspected_files = set()
+        for material_path in downloaded_videos:
+            if len(inspected_files) >= max_semantic_clips:
+                break
+            if material_path in inspected_files:
+                continue
+            inspected_files.add(material_path)
+            scene_query = semantic_source_groups.get(material_path)
+            if not scene_query:
+                continue
+            try:
+                semantic_report = visual_semantics.score_video_text(
+                    material_path, scene_query, sample_count=3
+                )
+            except Exception as exc:
+                logger.warning(
+                    "local semantic footage inspection skipped: "
+                    f"task_id={task_id}, file={path.basename(material_path)}, "
+                    f"error={type(exc).__name__}, detail={exc}"
+                )
+                continue
+            if not semantic_report:
+                continue
+            semantic_report.update({
+                "local_file": path.basename(material_path),
+                "scene_query": scene_query[:240],
+            })
+            semantic_reports.append(semantic_report)
+            if semantic_report["mean_similarity"] < semantic_threshold:
+                warnings.append({
+                    "code": "semantic_visual_mismatch",
+                    "local_file": path.basename(material_path),
+                    "similarity": semantic_report["mean_similarity"],
+                })
+
+        if semantic_reports:
+            try:
+                task_artifacts.patch_script_data(
+                    task_id, semantic_visual_reports=semantic_reports
+                )
+            except Exception as exc:
+                logger.warning(
+                    "failed to persist local semantic visual reports: "
+                    f"task_id={task_id}, error={type(exc).__name__}, detail={exc}"
+                )
     video_music_provider = _VIDEO_MUSIC_PROVIDERS.get(params.bgm_type)
     video_music_requested = (
         video_music_provider is not None
