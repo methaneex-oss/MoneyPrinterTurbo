@@ -338,10 +338,10 @@ class FileState(BaseState):
     def _json_default(value):
         if hasattr(value, "model_dump"):
             return value.model_dump(mode="json")
-        if hasattr(value, "__dict__"):
-            return value.__dict__
         if isinstance(value, Path):
             return str(value)
+        if hasattr(value, "__dict__"):
+            return value.__dict__
         raise TypeError(f"unsupported task-state value: {type(value).__name__}")
 
     def _read(self, task_id: str) -> dict | None:
