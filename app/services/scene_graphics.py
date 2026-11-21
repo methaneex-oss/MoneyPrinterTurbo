@@ -6,6 +6,7 @@ No network calls, paid APIs, downloaded models, or fabricated statistics.
 """
 from __future__ import annotations
 
+import math
 import re
 
 import numpy as np
@@ -24,6 +25,29 @@ _ACCENTS = {
     "narrative": (70, 211, 231, 255),
 }
 _NUMBER = re.compile(r"(?<![\w.-])\d+(?:\.\d+)?%?")
+
+
+def _scene_indicator_position(kind: str, time_seconds: float) -> tuple[float, float]:
+    """Return a restrained, looping motion path inside the scene's vector panel."""
+    phase = (max(0.0, float(time_seconds)) % 2.4) / 2.4
+    if kind == "comparison":
+        return 74 + 36 * phase, 87
+    if kind == "timeline":
+        return 30 + 130 * phase, 91
+    if kind == "data":
+        return 30 + 130 * phase, 120 - 55 * phase
+    if kind == "explainer":
+        nodes = ((31, 88), (94, 55), (157, 88))
+        segment = phase * (len(nodes) - 1)
+        index = min(len(nodes) - 2, int(segment))
+        progress = segment - index
+        start, finish = nodes[index], nodes[index + 1]
+        return (
+            start[0] + (finish[0] - start[0]) * progress,
+            start[1] + (finish[1] - start[1]) * progress,
+        )
+    angle = phase * 2 * math.pi
+    return 94 + 42 * math.cos(angle), 94 + 30 * math.sin(angle)
 
 
 def _font(size: int):
@@ -136,8 +160,30 @@ def _add_scene_graphic(clip, label: str):
     panel_clip = panel_clip.with_position(
         lambda t: (x, int(target_y + travel * (1.0 - min(1.0, max(0.0, t / 0.45)))))
     )
+
+    # A small luminous marker moves through the diagram according to its
+    # visual grammar, creating in-panel motion beyond the card's entrance.
+    accent = _ACCENTS[kind]
+    indicator_size = max(12, int(22 * scale))
+    indicator_image = Image.new("RGBA", (24, 24), (0, 0, 0, 0))
+    indicator_draw = ImageDraw.Draw(indicator_image)
+    indicator_draw.ellipse((1, 1, 23, 23), fill=(*accent[:3], 72))
+    indicator_draw.ellipse((6, 6, 18, 18), fill=accent)
+    indicator_draw.ellipse((10, 10, 14, 14), fill=(255, 255, 255, 245))
+    if indicator_size != 24:
+        indicator_image = indicator_image.resize(
+            (indicator_size, indicator_size), Image.Resampling.LANCZOS
+        )
+    indicator = ImageClip(np.asarray(indicator_image)).with_duration(duration)
+    indicator = indicator.with_position(
+        lambda t: (
+            x + (_scene_indicator_position(kind, t)[0] * scale) - indicator_size / 2,
+            int(target_y + travel * (1.0 - min(1.0, max(0.0, t / 0.45))))
+            + (_scene_indicator_position(kind, t)[1] * scale) - indicator_size / 2,
+        )
+    )
     return CompositeVideoClip(
-        [clip, panel_clip], size=(width, height)
+        [clip, panel_clip, indicator], size=(width, height)
     ).with_duration(float(clip.duration))
 
 
