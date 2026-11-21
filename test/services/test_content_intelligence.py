@@ -33,3 +33,20 @@ def test_audit_handles_empty_and_non_string_input():
     assert report["word_count"] == 0
     assert report["fact_check_status"] == "not_independently_verified"
     assert "empty_script" in report["warnings"]
+
+
+def test_audit_preserves_percent_currency_and_quantity_units():
+    report = audit_script(
+        "The rate reached 20%. A project cost $3.5 million over 12 months."
+    )
+
+    assert "20%" in report["numeric_claims_to_verify"]
+    assert "$3.5 million" in report["numeric_claims_to_verify"]
+    assert "12 months" in report["numeric_claims_to_verify"]
+
+
+def test_audit_keeps_decimal_numbers_intact():
+    report = audit_script("The value is 2.5, not 25.")
+
+    assert report["numeric_claims_to_verify"] == ["2.5", "25"]
+    assert report["sentence_count"] == 1
