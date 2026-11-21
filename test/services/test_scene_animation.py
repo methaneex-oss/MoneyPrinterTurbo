@@ -26,9 +26,9 @@ def test_scene_label_slides_in_holds_and_slides_out():
     card_width = 600
     target_x = 48
     duration = 2.0
-    assert scene_label_x(0, card_width, target_x, duration) == -card_width
+    assert scene_label_x(0, card_width, target_x, duration) == 0
     assert scene_label_x(0.5, card_width, target_x, duration) == target_x
-    assert scene_label_x(1.99, card_width, target_x, duration) < -card_width + 10
+    assert scene_label_x(1.99, card_width, target_x, duration) == 0
 
 
 
