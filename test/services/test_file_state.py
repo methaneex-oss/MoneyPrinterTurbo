@@ -69,14 +69,15 @@ class TestFileState(unittest.TestCase):
         self.assertEqual(len(list(Path(self.temp_dir.name).glob("*.json")) ), 1)
 
 
-if __name__ == "__main__":
-    unittest.main()
-
     def test_corrupt_record_does_not_break_other_task_discovery(self):
         self.state.update_task("healthy", progress=10)
-        (Path(self.temp_dir.name) / "broken.json").write_text(
+        self.state._path("corrupt-id").write_text(
             "{not valid json", encoding="utf-8"
         )
 
         self.assertIsNone(self.state.get_task("corrupt-id"))
         self.assertEqual(self.state.list_task_ids(), ["healthy"])
+
+
+if __name__ == "__main__":
+    unittest.main()
