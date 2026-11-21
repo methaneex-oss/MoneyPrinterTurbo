@@ -335,7 +335,7 @@ class FileState(BaseState):
     @staticmethod
     def _json_default(value):
         if hasattr(value, "model_dump"):
-            return value.model_dump()
+            return value.model_dump(mode="json")
         if hasattr(value, "__dict__"):
             return value.__dict__
         if isinstance(value, Path):
