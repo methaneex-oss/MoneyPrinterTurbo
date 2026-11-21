@@ -11,7 +11,7 @@ from __future__ import annotations
 import re
 
 import numpy as np
-from moviepy import ColorClip, CompositeVideoClip, ImageClip
+from moviepy import ColorClip, CompositeVideoClip, ImageClip, vfx
 from PIL import Image, ImageDraw, ImageFont
 
 
@@ -183,8 +183,13 @@ def add_scene_label(
     target_x = max(24, int(width * 0.045))
     target_y = max(24, int(height * 0.085))
     card_x = lambda t: scene_label_x(t, card_width, target_x, duration)
-    overlay = ImageClip(np.asarray(card)).with_duration(duration).with_position(
-        lambda t: (card_x(t), target_y)
+    entry_fade = min(0.18, duration * 0.2)
+    exit_fade = min(0.18, duration * 0.2)
+    overlay = (
+        ImageClip(np.asarray(card))
+        .with_duration(duration)
+        .with_position(lambda t: (card_x(t), target_y))
+        .with_effects([vfx.FadeIn(entry_fade), vfx.FadeOut(exit_fade)])
     )
     # A short accent stroke sweeps across the card as it settles. This adds
     # a second motion layer without rendering a full-frame animation per frame.
