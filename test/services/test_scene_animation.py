@@ -55,6 +55,7 @@ def test_scene_labels_without_manifest_return_no_overlays():
 def test_scene_type_inference_selects_distinct_visual_treatments():
     assert infer_scene_type("The difference between two systems") == "comparison"
     assert infer_scene_type("What happened before the industrial revolution") == "timeline"
+    assert infer_scene_type("The change between 1998 and 2024") == "timeline"
     assert infer_scene_type("Growth reached 42 percent") == "data"
     assert infer_scene_type("How the process works") == "explainer"
     assert infer_scene_type("A quiet ocean at sunset") == "narrative"
