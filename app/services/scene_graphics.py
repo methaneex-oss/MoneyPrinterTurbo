@@ -9,6 +9,7 @@ from __future__ import annotations
 import re
 
 import numpy as np
+from loguru import logger
 from moviepy import CompositeVideoClip, ImageClip
 from PIL import Image, ImageDraw, ImageFont
 
@@ -116,7 +117,7 @@ def build_scene_graphic(label: str) -> Image.Image:
     return image
 
 
-def add_scene_graphic(clip, label: str):
+def _add_scene_graphic(clip, label: str):
     """Add a compact, animated vector explainer panel to a rendered clip."""
     clean = normalize_scene_label(label)
     duration = min(3.2, float(getattr(clip, "duration", 0) or 0))
@@ -138,3 +139,16 @@ def add_scene_graphic(clip, label: str):
     return CompositeVideoClip(
         [clip, panel_clip], size=(width, height)
     ).with_duration(float(clip.duration))
+
+
+
+def add_scene_graphic(clip, label: str):
+    """Fail open: visual enhancement failures must never abort video rendering."""
+    try:
+        return _add_scene_graphic(clip, label)
+    except Exception as exc:
+        logger.warning(
+            "scene graphic overlay skipped; preserving source clip: "
+            f"{type(exc).__name__}: {exc}"
+        )
+        return clip
