@@ -1,3 +1,4 @@
+import numpy as np
 from PIL import Image
 
 from app.services.scene_graphics import build_scene_graphic
@@ -41,3 +42,25 @@ def test_animated_scene_overlays_compose_inside_frame():
     assert first_frame.shape == (720, 1280, 3)
     assert middle_frame.shape == (720, 1280, 3)
     assert clip.duration == 2.0
+
+def test_scene_label_alpha_fades_at_clip_boundaries():
+    from moviepy import ColorClip
+
+    from app.services.scene_animation import add_scene_label
+
+    base_color = (24, 32, 48)
+    clip = add_scene_label(
+        ColorClip(size=(640, 360), color=base_color, duration=2.0),
+        "A quiet ocean at sunset",
+        scene_index=1,
+    )
+
+    first_frame = clip.get_frame(0.0)
+    middle_frame = clip.get_frame(0.8)
+    final_frame = clip.get_frame(1.999)
+    expected = np.asarray(base_color, dtype=np.uint8)
+
+    assert np.all(first_frame == expected)
+    assert np.any(middle_frame != expected)
+    assert np.max(np.abs(final_frame.astype(np.int16) - expected)) <= 2
+    clip.close()
