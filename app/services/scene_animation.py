@@ -200,9 +200,16 @@ def add_scene_label(
     # a second motion layer without rendering a full-frame animation per frame.
     accent = _SCENE_ACCENTS[infer_scene_type(label)]
     stroke_width = min(64, max(32, card_width // 10))
+    stroke_duration = min(0.8, duration)
     stroke = ColorClip(size=(stroke_width, 4), color=accent[:3]).with_duration(
-        min(0.8, duration)
-    ).with_position(
+        stroke_duration
+    )
+    stroke_mask = (
+        ColorClip(size=(stroke_width, 4), color=1, is_mask=True)
+        .with_duration(stroke_duration)
+        .with_effects([vfx.FadeIn(entry_fade), vfx.FadeOut(exit_fade)])
+    )
+    stroke = stroke.with_mask(stroke_mask).with_position(
         lambda t: (
             card_x(t) + 28 + int((card_width - stroke_width - 56) * min(1.0, t / 0.8)),
             target_y + card_height - 13,
