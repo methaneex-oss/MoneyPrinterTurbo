@@ -148,6 +148,7 @@ def _add_scene_graphic(clip, label: str):
     width, height = (int(value) for value in clip.size)
     if not clean or duration < 0.8 or width < 640 or height < 360:
         return clip
+    kind = infer_scene_type(clean)
     panel = build_scene_graphic(clean)
     # Keep the panel inside the frame on both landscape and portrait canvases.
     scale = min(1.0, (width * 0.58) / panel.width, (height * 0.36) / panel.height)
