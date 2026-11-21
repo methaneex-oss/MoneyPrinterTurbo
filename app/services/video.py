@@ -43,7 +43,7 @@ from app.models.schema import (
     VideoTransitionMode,
 )
 from app.services import bgm as bgm_service
-from app.services import scene_animation
+from app.services import scene_animation, scene_graphics
 from app.services.utils import subtitle_shaping, video_effects
 from app.utils import file_security, logging_utils, utils
 from app.utils.subtitle_reader import moviepy_subtitles
@@ -1170,6 +1170,10 @@ def combine_videos(
                         utils.font_dir(), "MicrosoftYaHeiBold.ttc"
                     ),
                 )
+                # Phase 3/4: add a grounded vector explainer panel with a short
+                # entrance motion. The panel is local and uses only the matched
+                # narration heading; no generated facts or external assets.
+                clip = scene_graphics.add_scene_graphic(clip, scene_label)
 
             shuffle_side = random.choice(["left", "right", "top", "bottom"])
             # Short footage and faster playback can leave less than one second.
