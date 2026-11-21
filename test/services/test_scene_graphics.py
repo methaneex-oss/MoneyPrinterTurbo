@@ -78,3 +78,24 @@ def test_scene_specific_indicator_paths_move_inside_the_panel():
         assert 40 <= start[1] <= 135
         assert 20 <= middle[0] <= 170
         assert 40 <= middle[1] <= 135
+
+
+def test_scene_graphic_overlay_renders_and_animates_without_failing_open():
+    from moviepy import ColorClip
+
+    from app.services.scene_graphics import add_scene_graphic
+
+    base_color = (24, 32, 48)
+    clip = add_scene_graphic(
+        ColorClip(size=(1280, 720), color=base_color, duration=2.5),
+        "How the process works",
+    )
+
+    first = clip.get_frame(0.7)
+    later = clip.get_frame(1.9)
+    expected = np.asarray(base_color, dtype=np.uint8)
+
+    assert first.shape == (720, 1280, 3)
+    assert np.any(first != expected)
+    assert not np.array_equal(first, later)
+    clip.close()
