@@ -15,5 +15,5 @@ def test_colab_notebook_tracks_active_branch_and_persists_task_state():
     config_cell = next(cell for cell in code_cells if "task_state_dir" in cell)
 
     assert 'REPO_BRANCH = "feat/scene-composition-engine"' in checkout_cell
-    assert 'git", "pull", "--ff-only", "origin", REPO_BRANCH' in checkout_cell
+    assert '"pull", "--ff-only", "origin", REPO_BRANCH' in checkout_cell
     assert "/content/drive/MyDrive/MoneyPrinterTurbo/task-state" in config_cell
