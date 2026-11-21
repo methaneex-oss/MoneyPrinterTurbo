@@ -39,8 +39,10 @@ def test_animated_scene_overlays_compose_inside_frame():
 
     first_frame = clip.get_frame(0.0)
     middle_frame = clip.get_frame(0.8)
+    later_frame = clip.get_frame(1.6)
     assert first_frame.shape == (720, 1280, 3)
     assert middle_frame.shape == (720, 1280, 3)
+    assert not np.array_equal(middle_frame, later_frame)
     assert clip.duration == 2.0
 
 def test_scene_label_alpha_fades_at_clip_boundaries():
@@ -64,3 +66,15 @@ def test_scene_label_alpha_fades_at_clip_boundaries():
     assert np.any(middle_frame != expected)
     assert np.max(np.abs(final_frame.astype(np.int16) - expected)) <= 2
     clip.close()
+
+def test_scene_specific_indicator_paths_move_inside_the_panel():
+    from app.services.scene_graphics import _scene_indicator_position
+
+    for scene_type in ("comparison", "timeline", "data", "explainer", "narrative"):
+        start = _scene_indicator_position(scene_type, 0.0)
+        middle = _scene_indicator_position(scene_type, 1.2)
+        assert start != middle
+        assert 20 <= start[0] <= 170
+        assert 40 <= start[1] <= 135
+        assert 20 <= middle[0] <= 170
+        assert 40 <= middle[1] <= 135
