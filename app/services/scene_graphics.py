@@ -6,11 +6,10 @@ No network calls, paid APIs, downloaded models, or fabricated statistics.
 """
 from __future__ import annotations
 
-import math
 import re
 
 import numpy as np
-from moviepy import ImageClip
+from moviepy import CompositeVideoClip, ImageClip
 from PIL import Image, ImageDraw, ImageFont
 
 from app.services.scene_animation import infer_scene_type, normalize_scene_label
@@ -33,7 +32,7 @@ def _font(size: int):
         return ImageFont.load_default()
 
 
-def _draw_motif(draw: ImageDraw.ImageDraw, kind: str, accent):
+def _draw_motif(draw: ImageDraw.ImageDraw, kind: str, accent, label: str):
     """Draw a data-safe visual grammar; no implied measurements or dates."""
     white = (235, 241, 250, 235)
     muted = (130, 148, 172, 220)
@@ -49,7 +48,7 @@ def _draw_motif(draw: ImageDraw.ImageDraw, kind: str, accent):
             draw.ellipse((x - 9, 82, x + 9, 100), fill=accent if index == 1 else white)
             draw.text((x - 8, 111), f"{index:02d}", font=_font(13), fill=muted)
     elif kind == "data":
-        values = [float(value.rstrip("%")) for value in _NUMBER.findall(_current_label)]
+        values = [float(value.rstrip("%")) for value in _NUMBER.findall(label)]
         values = values[:4]
         if values:
             maximum = max(values) or 1.0
@@ -75,16 +74,11 @@ def _draw_motif(draw: ImageDraw.ImageDraw, kind: str, accent):
         draw.line((94, 42, 94, 62), fill=muted, width=3)
 
 
-_current_label = ""
-
-
 def build_scene_graphic(label: str) -> Image.Image:
     """Create a transparent editorial panel with a type-specific vector motif."""
-    global _current_label
     clean = normalize_scene_label(label)
     if not clean:
         raise ValueError("scene label cannot be empty")
-    _current_label = clean
     kind = infer_scene_type(clean)
     accent = _ACCENTS[kind]
     image = Image.new("RGBA", _PANEL, (0, 0, 0, 0))
@@ -92,7 +86,7 @@ def build_scene_graphic(label: str) -> Image.Image:
     draw.rounded_rectangle((1, 1, _PANEL[0]-2, _PANEL[1]-2), 20,
                            fill=(7, 13, 25, 222), outline=(255, 255, 255, 48), width=2)
     draw.rounded_rectangle((1, 1, 8, _PANEL[1]-2), 4, fill=accent)
-    _draw_motif(draw, kind, accent)
+    _draw_motif(draw, kind, accent, clean)
     draw.line((190, 34, 190, 156), fill=(255, 255, 255, 45), width=2)
     draw.text((214, 43), kind.upper(), font=_font(15), fill=accent)
     # The heading is the only textual claim shown in this panel.
@@ -133,6 +127,6 @@ def add_scene_graphic(clip, label: str):
     panel_clip = panel_clip.with_position(
         lambda t: (x, int(target_y + travel * (1.0 - min(1.0, max(0.0, t / 0.45)))))
     )
-    return __import__("moviepy").CompositeVideoClip(
+    return CompositeVideoClip(
         [clip, panel_clip], size=(width, height)
     ).with_duration(float(clip.duration))
