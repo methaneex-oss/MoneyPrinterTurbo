@@ -35,6 +35,9 @@ _SCENE_ACCENTS = {
 def infer_scene_type(label: str) -> str:
     """Choose a lightweight visual treatment from grounded scene-heading cues."""
     text = normalize_scene_label(label)
+    # Four-digit years are temporal markers, not measurements for a chart.
+    if re.search(r"\\b(?:18|19|20)\\d{2}\\b", text):
+        return "timeline"
     for scene_type in ("comparison", "timeline", "data", "explainer"):
         if _SCENE_CUES[scene_type].search(text):
             return scene_type
