@@ -12,7 +12,8 @@ _WORD = re.compile(r"[^\W_]+(?:['’][^\W_]+)?", re.UNICODE)
 _SENTENCE = re.compile(r"(?<=[.!?。！？])\s+")
 _NUMBER_OR_QUANTITY = re.compile(
     r"(?<!\w)(?:[$€£₦]\s*)?\d[\d,]*(?:\.\d+)?\s*(?:%|percent|per cent|million|billion|trillion|thousand|"
-    r"years?|months?|days?|hours?|minutes?|degrees?|kg|km|miles?)?\b",
+    r"years?|months?|days?|hours?|minutes?|seconds?|weeks?|degrees?|kg|km|miles?|cm|mm|meters?|metres?|"
+    r"°[CF]|[CF]elsius|[CF]ahrenheit|ms|MB|GB|TB|Hz|kHz|MHz|GHz|watts?|kilowatts?)?(?=$|[^\w])",
     re.IGNORECASE,
 )
 _ABSOLUTE_CLAIMS = re.compile(
