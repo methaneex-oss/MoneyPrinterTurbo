@@ -43,10 +43,14 @@ def _draw_motif(draw: ImageDraw.ImageDraw, kind: str, accent, label: str):
         draw.text((124, 77), "B", font=_font(25), fill=white)
         draw.line((85, 87, 101, 87), fill=accent, width=4)
     elif kind == "timeline":
+        years = re.findall(r"\\b(?:18|19|20)\\d{2}\\b", label)[:3]
+        positions = (30, 95, 160) if len(years) != 2 else (48, 142)
         draw.line((22, 91, 168, 91), fill=muted, width=4)
-        for index, x in enumerate((30, 95, 160), 1):
-            draw.ellipse((x - 9, 82, x + 9, 100), fill=accent if index == 1 else white)
-            draw.text((x - 8, 111), f"{index:02d}", font=_font(13), fill=muted)
+        for index, x in enumerate(positions):
+            draw.ellipse((x - 9, 82, x + 9, 100), fill=accent if index == 0 else white)
+            marker = years[index] if len(years) == len(positions) else f"{index + 1:02d}"
+            marker_width = draw.textbbox((0, 0), marker, font=_font(11))[2]
+            draw.text((x - marker_width // 2, 111), marker, font=_font(11), fill=muted)
     elif kind == "data":
         values = [float(value.rstrip("%")) for value in _NUMBER.findall(label)]
         values = values[:4]
@@ -56,6 +60,10 @@ def _draw_motif(draw: ImageDraw.ImageDraw, kind: str, accent, label: str):
                 x = 22 + index * 39
                 bar_height = max(8, int(76 * value / maximum))
                 draw.rounded_rectangle((x, 128 - bar_height, x + 23, 128), 5, fill=accent)
+                value_label = _NUMBER.findall(label)[index]
+                label_width = draw.textbbox((0, 0), value_label, font=_font(9))[2]
+                draw.text((x + 11 - label_width // 2, max(42, 124 - bar_height - 14)),
+                          value_label, font=_font(9), fill=white)
         else:
             # No numeric values were supplied: show a neutral data-grid motif.
             for x in (28, 66, 104, 142):
