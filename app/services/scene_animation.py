@@ -84,10 +84,12 @@ def scene_label_x(
     entry = min(0.42, duration * 0.38)
     exit_start = max(entry, duration - min(0.32, duration * 0.24))
     exit_end = max(exit_start + 0.001, duration)
+    # Keep the animated card within the frame. MoviePy v2's compositor can
+    # produce invalid mask slices for partially off-canvas RGBA overlays.
     if time_seconds < entry:
         progress = max(0.0, min(1.0, time_seconds / entry))
         eased = 1.0 - (1.0 - progress) ** 3
-        return int(round(-card_width + (target_x + card_width) * eased))
+        return int(round(target_x * eased))
     if time_seconds < exit_start:
         return target_x
     progress = max(
@@ -95,7 +97,7 @@ def scene_label_x(
         min(1.0, (time_seconds - exit_start) / (exit_end - exit_start)),
     )
     eased = progress * progress * (3.0 - 2.0 * progress)
-    return int(round(target_x - (target_x + card_width) * eased))
+    return int(round(target_x * (1.0 - eased)))
 
 
 def _font(font_path: str | None, size: int):
