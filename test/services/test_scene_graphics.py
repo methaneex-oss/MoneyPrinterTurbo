@@ -1,7 +1,7 @@
 import numpy as np
 from PIL import Image
 
-from app.services.scene_graphics import build_scene_graphic
+from app.services.scene_graphics import build_scene_graphic, _comparable_numeric_values
 
 
 def test_scene_graphic_builds_transparent_panel_for_each_visual_grammar():
@@ -99,3 +99,14 @@ def test_scene_graphic_overlay_renders_and_animates_without_failing_open():
     assert np.any(first != expected)
     assert not np.array_equal(first, later)
     clip.close()
+
+def test_data_graphics_compare_only_matching_units():
+    assert _comparable_numeric_values(
+        "Growth increased from 20% to 30 percent"
+    ) == [(20.0, "20%"), (30.0, "30 percent")]
+    assert _comparable_numeric_values(
+        "A rate of 20% alongside a cost of $3.5 million"
+    ) == []
+    assert _comparable_numeric_values("Growth reached 42 percent") == []
+    assert _comparable_numeric_values("Costs were $5 and €7") == []
+
