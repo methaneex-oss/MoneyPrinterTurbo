@@ -1,6 +1,10 @@
 import ast
 import copy
+import json
+import os
+import tempfile
 import threading
+from pathlib import Path
 from abc import ABC, abstractmethod
 
 from redis.exceptions import ResponseError
@@ -307,6 +311,163 @@ class RedisState(BaseState):
         return value_str
 
 
+class FileState(BaseState):
+    """
+    JSON-backed task state for single-process deployments that need persistence.
+
+    The Colab notebook places this directory on Google Drive. Writes use a
+    same-directory temporary file and os.replace; callers still need a filesystem
+    that supports replacement semantics. This backend is not a distributed lock
+    manager and must not be shared by multiple active application processes.
+    """
+
+    def __init__(self, directory: str | Path):
+        self.directory = Path(directory).expanduser()
+        self.directory.mkdir(parents=True, exist_ok=True)
+        self._lock = threading.RLock()
+
+    def _path(self, task_id: str) -> Path:
+        # Task IDs are untrusted API input; never use them as path components.
+        import hashlib
+        digest = hashlib.sha256(str(task_id).encode("utf-8")).hexdigest()
+        return self.directory / f"{digest}.json"
+
+    @staticmethod
+    def _json_default(value):
+        if hasattr(value, "model_dump"):
+            return value.model_dump()
+        if hasattr(value, "__dict__"):
+            return value.__dict__
+        if isinstance(value, Path):
+            return str(value)
+        raise TypeError(f"unsupported task-state value: {type(value).__name__}")
+
+    def _read(self, task_id: str) -> dict | None:
+        target = self._path(task_id)
+        try:
+            with target.open("r", encoding="utf-8") as handle:
+                task = json.load(handle)
+        except FileNotFoundError:
+            return None
+        if not isinstance(task, dict) or task.get("task_id") != task_id:
+            return None
+        return task
+
+    def _write(self, task_id: str, task: dict) -> None:
+        target = self._path(task_id)
+        temp_path = None
+        try:
+            with tempfile.NamedTemporaryFile(
+                mode="w",
+                encoding="utf-8",
+                dir=self.directory,
+                prefix=f".{target.stem}.",
+                suffix=".tmp",
+                delete=False,
+            ) as handle:
+                temp_path = Path(handle.name)
+                json.dump(
+                    task,
+                    handle,
+                    ensure_ascii=False,
+                    separators=(",", ":"),
+                    default=self._json_default,
+                )
+                handle.write("\n")
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.replace(temp_path, target)
+            temp_path = None
+        finally:
+            if temp_path is not None:
+                temp_path.unlink(missing_ok=True)
+
+    def get_task(self, task_id: str):
+        with self._lock:
+            task = self._read(task_id)
+            return copy.deepcopy(task) if task is not None else None
+
+    def update_task(
+        self,
+        task_id: str,
+        state: int = const.TASK_STATE_PROCESSING,
+        progress: int = 0,
+        **kwargs,
+    ):
+        progress = min(100, int(progress))
+        with self._lock:
+            task = self._read(task_id) or {"task_id": task_id}
+            task.update({
+                "task_id": task_id,
+                "state": state,
+                "progress": progress,
+                **copy.deepcopy(kwargs),
+            })
+            self._write(task_id, task)
+
+    def patch_task(self, task_id: str, **kwargs) -> bool:
+        if not kwargs:
+            return False
+        with self._lock:
+            task = self._read(task_id)
+            if task is None:
+                return False
+            task.update(copy.deepcopy(kwargs))
+            self._write(task_id, task)
+            return True
+
+    def list_task_ids(self, scan_count: int = 100) -> list[str]:
+        del scan_count  # Filesystem enumeration has no SCAN batch parameter.
+        task_ids = []
+        with self._lock:
+            for target in self.directory.glob("*.json"):
+                try:
+                    with target.open("r", encoding="utf-8") as handle:
+                        task = json.load(handle)
+                    task_id = task.get("task_id") if isinstance(task, dict) else None
+                    if isinstance(task_id, str) and task_id:
+                        task_ids.append(task_id)
+                except (OSError, ValueError, TypeError):
+                    # A corrupt task record must not hide every other task.
+                    continue
+        return sorted(set(task_ids))
+
+    def get_all_tasks(self, page: int, page_size: int):
+        page = max(1, int(page))
+        page_size = max(1, int(page_size))
+        task_ids = self.list_task_ids()
+        start = (page - 1) * page_size
+        tasks = []
+        for task_id in task_ids[start:start + page_size]:
+            task = self.get_task(task_id)
+            if task is not None:
+                tasks.append(task)
+        return tasks, len(task_ids)
+
+    def delete_task(self, task_id: str):
+        with self._lock:
+            self._path(task_id).unlink(missing_ok=True)
+
+    def recover_interrupted_tasks(self) -> int:
+        """Mark non-terminal tasks left by a prior process as interrupted."""
+        recovered = 0
+        for task_id in self.list_task_ids():
+            task = self.get_task(task_id)
+            if not task or task.get("state") != const.TASK_STATE_PROCESSING:
+                continue
+            updated = self.patch_task(
+                task_id,
+                state=const.TASK_STATE_FAILED,
+                failed_stage=task.get("failed_stage") or "interrupted",
+                error=task.get("error") or (
+                    "generation was interrupted when the application process stopped; "
+                    "completed files, if any, remain in the task folder"
+                ),
+            )
+            recovered += int(updated)
+        return recovered
+
+
 # Global state
 _enable_redis = config.app.get("enable_redis", False)
 _redis_host = config.app.get("redis_host", "localhost")
@@ -314,10 +475,16 @@ _redis_port = config.app.get("redis_port", 6379)
 _redis_db = config.app.get("redis_db", 0)
 _redis_password = config.app.get("redis_password", None)
 
-state = (
-    RedisState(
+_task_state_dir = str(config.app.get("task_state_dir", "") or "").strip()
+if _enable_redis:
+    state = RedisState(
         host=_redis_host, port=_redis_port, db=_redis_db, password=_redis_password
     )
-    if _enable_redis
-    else MemoryState()
-)
+elif _task_state_dir:
+    state = FileState(_task_state_dir)
+    _recovered_tasks = state.recover_interrupted_tasks()
+    if _recovered_tasks:
+        from loguru import logger
+        logger.warning(f"marked interrupted file-backed tasks as failed: {_recovered_tasks}")
+else:
+    state = MemoryState()
