@@ -25,11 +25,11 @@ _ACCENTS = {
     "narrative": (70, 211, 231, 255),
 }
 _NUMBER = re.compile(
-    r"(?<![\\w.-])(?P<prefix>[$€£₦])?\\s*(?P<value>\\d+(?:\\.\\d+)?)"
-    r"(?P<unit>\\s*(?:%|percent|per cent|million|billion|trillion|thousand|"
+    r"(?<![\w.-])(?P<prefix>[$€£₦])?\s*(?P<value>\d+(?:\.\d+)?)"
+    r"(?P<unit>\s*(?:%|percent|per cent|million|billion|trillion|thousand|"
     r"years?|months?|days?|hours?|minutes?|seconds?|weeks?|degrees?|kg|km|miles?|"
     r"cm|mm|meters?|metres?|°[CF]|[CF]elsius|[CF]ahrenheit|ms|MB|GB|TB|Hz|"
-    r"kHz|MHz|GHz|watts?|kilowatts?))?(?=$|[^\\w])",
+    r"kHz|MHz|GHz|watts?|kilowatts?))?(?=$|[^\w])",
     re.IGNORECASE,
 )
 
@@ -53,7 +53,6 @@ def _comparable_numeric_values(label: str) -> list[tuple[float, str]]:
         (float(match.group("value")), match.group(0).strip())
         for match in matches
     ]
-
 
 def _scene_indicator_position(kind: str, time_seconds: float) -> tuple[float, float]:
     """Return a restrained, looping motion path inside the scene's vector panel."""
