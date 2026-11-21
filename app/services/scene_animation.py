@@ -185,12 +185,17 @@ def add_scene_label(
     card_x = lambda t: scene_label_x(t, card_width, target_x, duration)
     entry_fade = min(0.18, duration * 0.2)
     exit_fade = min(0.18, duration * 0.2)
-    overlay = (
-        ImageClip(np.asarray(card))
-        .with_duration(duration)
-        .with_position(lambda t: (card_x(t), target_y))
-        .with_effects([vfx.FadeIn(entry_fade), vfx.FadeOut(exit_fade)])
+    overlay = ImageClip(np.asarray(card)).with_duration(duration).with_position(
+        lambda t: (card_x(t), target_y)
     )
+    # Fade the alpha mask, not the RGB image; fading RGB to black leaves an
+    # opaque dark rectangle at both clip boundaries.
+    if overlay.mask is not None:
+        overlay = overlay.with_mask(
+            overlay.mask.with_effects(
+                [vfx.FadeIn(entry_fade), vfx.FadeOut(exit_fade)]
+            )
+        )
     # A short accent stroke sweeps across the card as it settles. This adds
     # a second motion layer without rendering a full-frame animation per frame.
     accent = _SCENE_ACCENTS[infer_scene_type(label)]
