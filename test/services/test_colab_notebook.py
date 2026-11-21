@@ -17,3 +17,5 @@ def test_colab_notebook_tracks_active_branch_and_persists_task_state():
     assert 'REPO_BRANCH = "feat/scene-composition-engine"' in checkout_cell
     assert '"pull", "--ff-only", "origin", REPO_BRANCH' in checkout_cell
     assert "/content/drive/MyDrive/MoneyPrinterTurbo/task-state" in config_cell
+
+    assert "app['enable_redis'] = False" in config_cell
