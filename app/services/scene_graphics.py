@@ -116,7 +116,7 @@ def _draw_motif(draw: ImageDraw.ImageDraw, kind: str, accent, label: str):
                 draw.text((x + 11 - label_width // 2, max(42, 124 - bar_height - 14)),
                           value_label, font=_font(9), fill=white)
         else:
-            # No numeric values were supplied: show a neutral data-grid motif.
+            # No comparable same-unit values were supplied: avoid implying a false comparison.
             for x in (28, 66, 104, 142):
                 draw.line((x, 53, x, 130), fill=muted, width=2)
             for y in (62, 96, 130):
