@@ -22,7 +22,7 @@ _ACCENTS = {
     "explainer": (255, 137, 163, 255),
     "narrative": (70, 211, 231, 255),
 }
-_NUMBER = re.compile(r"(?<![\\w.])\\d+(?:\\.\\d+)?%?")
+_NUMBER = re.compile(r"(?<![\w.-])\d+(?:\.\d+)?%?")
 
 
 def _font(size: int):
@@ -43,7 +43,7 @@ def _draw_motif(draw: ImageDraw.ImageDraw, kind: str, accent, label: str):
         draw.text((124, 77), "B", font=_font(25), fill=white)
         draw.line((85, 87, 101, 87), fill=accent, width=4)
     elif kind == "timeline":
-        years = re.findall(r"\\b(?:18|19|20)\\d{2}\\b", label)[:3]
+        years = re.findall(r"\b(?:18|19|20)\d{2}\b", label)[:3]
         positions = (30, 95, 160) if len(years) != 2 else (48, 142)
         draw.line((22, 91, 168, 91), fill=muted, width=4)
         for index, x in enumerate(positions):
