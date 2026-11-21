@@ -5,6 +5,8 @@ import os
 import tempfile
 import threading
 from pathlib import Path
+
+from loguru import logger
 from abc import ABC, abstractmethod
 
 from redis.exceptions import ResponseError
@@ -349,6 +351,12 @@ class FileState(BaseState):
                 task = json.load(handle)
         except FileNotFoundError:
             return None
+        except (OSError, ValueError) as exc:
+            logger.warning(
+                "ignoring unreadable file-backed task state: "
+                f"task_id={task_id}, error={type(exc).__name__}: {exc}"
+            )
+            return None
         if not isinstance(task, dict) or task.get("task_id") != task_id:
             return None
         return task
@@ -484,7 +492,6 @@ elif _task_state_dir:
     state = FileState(_task_state_dir)
     _recovered_tasks = state.recover_interrupted_tasks()
     if _recovered_tasks:
-        from loguru import logger
         logger.warning(f"marked interrupted file-backed tasks as failed: {_recovered_tasks}")
 else:
     state = MemoryState()
