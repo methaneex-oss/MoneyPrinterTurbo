@@ -24,7 +24,35 @@ _ACCENTS = {
     "explainer": (255, 137, 163, 255),
     "narrative": (70, 211, 231, 255),
 }
-_NUMBER = re.compile(r"(?<![\w.-])\d+(?:\.\d+)?%?")
+_NUMBER = re.compile(
+    r"(?<![\\w.-])(?P<prefix>[$€£₦])?\\s*(?P<value>\\d+(?:\\.\\d+)?)"
+    r"(?P<unit>\\s*(?:%|percent|per cent|million|billion|trillion|thousand|"
+    r"years?|months?|days?|hours?|minutes?|seconds?|weeks?|degrees?|kg|km|miles?|"
+    r"cm|mm|meters?|metres?|°[CF]|[CF]elsius|[CF]ahrenheit|ms|MB|GB|TB|Hz|"
+    r"kHz|MHz|GHz|watts?|kilowatts?))?(?=$|[^\\w])",
+    re.IGNORECASE,
+)
+
+
+def _comparable_numeric_values(label: str) -> list[tuple[float, str]]:
+    """Return values only when at least two explicit quantities share one unit."""
+    matches = list(_NUMBER.finditer(label))
+    if len(matches) < 2:
+        return []
+
+    def unit_key(match):
+        prefix = (match.group("prefix") or "").casefold()
+        unit = (match.group("unit") or "").strip().casefold()
+        if unit in {"percent", "per cent"}:
+            unit = "%"
+        return prefix, unit
+
+    if len({unit_key(match) for match in matches}) != 1:
+        return []
+    return [
+        (float(match.group("value")), match.group(0).strip())
+        for match in matches
+    ]
 
 
 def _scene_indicator_position(kind: str, time_seconds: float) -> tuple[float, float]:
@@ -77,15 +105,14 @@ def _draw_motif(draw: ImageDraw.ImageDraw, kind: str, accent, label: str):
             marker_width = draw.textbbox((0, 0), marker, font=_font(11))[2]
             draw.text((x - marker_width // 2, 111), marker, font=_font(11), fill=muted)
     elif kind == "data":
-        values = [float(value.rstrip("%")) for value in _NUMBER.findall(label)]
-        values = values[:4]
-        if values:
+        comparable_values = _comparable_numeric_values(label)[:4]
+        if comparable_values:
+            values = [value for value, _ in comparable_values]
             maximum = max(values) or 1.0
-            for index, value in enumerate(values):
+            for index, (value, value_label) in enumerate(comparable_values):
                 x = 22 + index * 39
                 bar_height = max(8, int(76 * value / maximum))
                 draw.rounded_rectangle((x, 128 - bar_height, x + 23, 128), 5, fill=accent)
-                value_label = _NUMBER.findall(label)[index]
                 label_width = draw.textbbox((0, 0), value_label, font=_font(9))[2]
                 draw.text((x + 11 - label_width // 2, max(42, 124 - bar_height - 14)),
                           value_label, font=_font(9), fill=white)
