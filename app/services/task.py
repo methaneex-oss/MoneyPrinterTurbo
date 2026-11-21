@@ -21,6 +21,7 @@ from app.services.visual_quality import inspect_video_quality
 from app.services import (
     codex_image,
     codex_oauth,
+    content_intelligence,
     elevenlabs_music,
     generation_progress,
     infistar_video,
@@ -437,6 +438,7 @@ def save_script_data(task_id, video_script, video_terms, params):
         "script": video_script,
         "search_terms": video_terms,
         "params": params,
+        "content_review": content_intelligence.audit_script(video_script),
     }
     task_artifacts.write_script_data(task_id, script_data)
 
