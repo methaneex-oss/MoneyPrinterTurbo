@@ -1080,10 +1080,14 @@ def generate_final_videos(
     semantic_score_cache = {}
     semantic_inspected_files = set()
     semantic_enabled = visual_semantics.is_enabled()
-    # Align each manifest query to its narration section. The resulting editorial
-    # heading drives chapter labels and supplies script context to optional QA.
+    # Keep retrieval queries separate from editorial headings: chapter graphics
+    # use narration-aware labels, while semantic QA must retain the original search
+    # query so it measures whether the footage matches the requested visual subject.
     scene_source_groups = _get_material_scene_labels(task_id, downloaded_videos)
-    semantic_source_groups = scene_source_groups if semantic_enabled else {}
+    semantic_source_groups = (
+        _get_material_source_groups(task_id, downloaded_videos)
+        if semantic_enabled else {}
+    )
     try:
         max_semantic_clips = max(
             1,
