@@ -1,5 +1,6 @@
 import tempfile
 import unittest
+from pathlib import Path
 
 from app.models import const
 from app.services.state import FileState
@@ -65,8 +66,17 @@ class TestFileState(unittest.TestCase):
     def test_task_ids_are_not_used_as_file_paths(self):
         self.state.update_task("../../outside", progress=1)
         self.assertEqual(self.state.get_task("../../outside")["task_id"], "../../outside")
-        self.assertEqual(len(list(__import__("pathlib").Path(self.temp_dir.name).glob("*.json"))), 1)
+        self.assertEqual(len(list(Path(self.temp_dir.name).glob("*.json")) ), 1)
 
 
 if __name__ == "__main__":
     unittest.main()
+
+    def test_corrupt_record_does_not_break_other_task_discovery(self):
+        self.state.update_task("healthy", progress=10)
+        (Path(self.temp_dir.name) / "broken.json").write_text(
+            "{not valid json", encoding="utf-8"
+        )
+
+        self.assertIsNone(self.state.get_task("corrupt-id"))
+        self.assertEqual(self.state.list_task_ids(), ["healthy"])
