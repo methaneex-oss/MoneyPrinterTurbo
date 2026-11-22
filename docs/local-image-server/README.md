@@ -23,6 +23,8 @@ python -m venv .venv
 
 The first request downloads the fp16 weights, about 6.6 GB. The server listens on `http://127.0.0.1:7861`. A `size` that isn't `WIDTHxHEIGHT` with positive numbers gets a 422 response.
 
+For Colab, the notebook checks for a CUDA GPU with at least 14 GiB VRAM, starts this server, and calls `POST /warmup` before enabling the local image source. Warmup downloads and loads the weights before a video task begins, avoiding a long first-request download. The endpoint returns the model name and whether it is resident on the GPU. The idle worker can still move the model back to CPU after `IMAGE_IDLE_SECONDS`.
+
 Tests, from the repo root, with no GPU needed: `python -m pytest test/services/test_local_image_policy.py test/services/test_local_image_server.py`. The server tests run the real HTTP app with a stand-in pipeline and a fake Ollama.
 
 ## config.toml
