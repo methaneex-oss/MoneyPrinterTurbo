@@ -15,7 +15,7 @@ from moviepy import CompositeVideoClip, ImageClip, VideoClip
 from PIL import Image, ImageDraw, ImageFont
 
 
-_CONTROL_CHARS = re.compile(r"[\\x00-\\x1f\\x7f-\\x9f]")
+_CONTROL_CHARS = re.compile(r"[\x00-\x1f\x7f-\x9f]")
 MAX_LABEL_LENGTH = 72
 
 
