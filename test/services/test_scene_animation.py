@@ -49,8 +49,10 @@ def test_scene_progress_frame_is_transparent_and_grows_over_time():
     assert start.shape == (124, 500, 4)
     assert start.dtype.name == "uint8"
     assert start[0, 0, 3] == 0
-    assert int((middle[:, :, 3] > 0).sum()) > int((start[:, :, 3] > 0).sum())
-    assert int((end[:, :, 3] > 0).sum()) > int((middle[:, :, 3] > 0).sum())
+    # The rail remains visible, while its cyan foreground advances over time.
+    assert tuple(start[112, 100, :3]) != tuple(middle[112, 100, :3])
+    assert tuple(middle[112, 350, :3]) == tuple(start[112, 350, :3])
+    assert tuple(end[112, 350, :3]) != tuple(middle[112, 350, :3])
 
 
 def test_scene_labels_only_appear_at_first_occurrence_of_each_query():
