@@ -217,6 +217,16 @@ def models():
     return {"data": [{"id": MODEL, "object": "model"}]}
 
 
+@app.post("/warmup")
+def warmup():
+    """Load the local image model before a paid-workflow request can reach it."""
+    global last_used
+    with lock:
+        claim_gpu()
+        last_used = time.time()
+    return {"ok": True, "model": MODEL, "on_gpu": on_gpu}
+
+
 @app.post("/v1/images/generations")
 def generate(req: ImageRequest):
     global last_used

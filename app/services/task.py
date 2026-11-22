@@ -21,6 +21,7 @@ from app.services.visual_quality import inspect_video_quality
 from app.services import (
     codex_image,
     codex_oauth,
+    content_intelligence,
     elevenlabs_music,
     generation_progress,
     infistar_video,
@@ -33,6 +34,7 @@ from app.services import (
     ofox,
     sonilo,
     subtitle,
+    scene_planner,
     task_artifacts,
     twelvelabs,
     useapi,
@@ -436,6 +438,7 @@ def save_script_data(task_id, video_script, video_terms, params):
         "script": video_script,
         "search_terms": video_terms,
         "params": params,
+        "content_review": content_intelligence.audit_script(video_script),
     }
     task_artifacts.write_script_data(task_id, script_data)
 
@@ -1025,6 +1028,26 @@ def _get_material_source_groups(task_id: str, video_paths: list[str]) -> dict[st
         return {}
 
 
+
+def _get_material_scene_labels(task_id: str, video_paths: list[str]) -> dict[str, str]:
+    """Build narration-aware editorial labels for the actual downloaded sources."""
+    source_groups = _get_material_source_groups(task_id, video_paths)
+    if not source_groups:
+        return {}
+    try:
+        with open(
+            path.join(utils.task_dir(task_id), "script.json"), encoding="utf-8"
+        ) as file:
+            payload = json.load(file)
+        script = payload.get("script", "") if isinstance(payload, dict) else ""
+        return scene_planner.build_scene_labels(script, source_groups)
+    except (OSError, ValueError, AttributeError, TypeError) as exc:
+        logger.warning(
+            f"Cannot build narration-aware scene labels: task_id={task_id}, error={exc}"
+        )
+        return source_groups
+
+
 def generate_final_videos(
     task_id, params, downloaded_videos, audio_file, subtitle_path, audio_duration,
     *, partial_results: dict | None = None,
@@ -1059,10 +1082,14 @@ def generate_final_videos(
     semantic_score_cache = {}
     semantic_inspected_files = set()
     semantic_enabled = visual_semantics.is_enabled()
-    # The same per-scene query used for semantic QA also drives the animated
-    # chapter labels. Labels remain available even when the optional model is off.
-    scene_source_groups = _get_material_source_groups(task_id, downloaded_videos)
-    semantic_source_groups = scene_source_groups if semantic_enabled else {}
+    # Keep retrieval queries separate from editorial headings: chapter graphics
+    # use narration-aware labels, while semantic QA must retain the original search
+    # query so it measures whether the footage matches the requested visual subject.
+    scene_source_groups = _get_material_scene_labels(task_id, downloaded_videos)
+    semantic_source_groups = (
+        _get_material_source_groups(task_id, downloaded_videos)
+        if semantic_enabled else {}
+    )
     try:
         max_semantic_clips = max(
             1,
