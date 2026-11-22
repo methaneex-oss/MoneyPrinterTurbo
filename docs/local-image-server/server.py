@@ -267,7 +267,12 @@ def warmup():
     with lock:
         claim_gpu()
         last_used = time.time()
-    return {"ok": True, "model": MODEL, "on_gpu": on_gpu}
+    return {
+        "ok": True,
+        "model": MODEL,
+        "backend": IMAGE_BACKEND,
+        "on_gpu": on_gpu,
+    }
 
 
 @app.post("/v1/images/generations")
