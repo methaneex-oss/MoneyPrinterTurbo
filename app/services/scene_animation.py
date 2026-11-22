@@ -157,7 +157,9 @@ def build_scene_label_card(
     fitted = label
     while fitted and draw.textbbox((0, 0), fitted, font=title_font)[2] > max_text_width:
         fitted = fitted[:-2].rstrip() + "…"
-    draw.text((34, 52), fitted or label[:18], font=title_font, fill=(250, 252, 255, 255))
+    draw.text(
+        (34, 52), fitted or label[:18], font=title_font, fill=(250, 252, 255, 255)
+    )
     return card
 
 
@@ -191,7 +193,11 @@ def add_scene_label(
         scene_label_x(t, card_width, target_x, duration),
         target_y,
     )
-    overlay = ImageClip(np.asarray(card)).with_duration(duration).with_position(position)
+    overlay = (
+        ImageClip(np.asarray(card))
+        .with_duration(duration)
+        .with_position(position)
+    )
 
     def progress_frame(t):
         return build_scene_progress_frame(
