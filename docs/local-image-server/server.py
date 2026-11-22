@@ -15,10 +15,22 @@ from pydantic import BaseModel, field_validator
 
 import policy
 
-MODEL = os.environ.get("IMAGE_MODEL", "SG161222/RealVisXL_V5.0_Lightning")
+IMAGE_BACKEND = os.environ.get("IMAGE_BACKEND", "sdxl").strip().lower()
+_MODEL_DEFAULTS = {
+    "sdxl": "SG161222/RealVisXL_V5.0_Lightning",
+    "sd-turbo": "stabilityai/sd-turbo",
+    "sd15": "stable-diffusion-v1-5/stable-diffusion-v1-5",
+}
+if IMAGE_BACKEND not in _MODEL_DEFAULTS:
+    raise RuntimeError(
+        f"unsupported IMAGE_BACKEND={IMAGE_BACKEND!r}; choose one of {', '.join(_MODEL_DEFAULTS)}"
+    )
+MODEL = os.environ.get("IMAGE_MODEL", _MODEL_DEFAULTS[IMAGE_BACKEND])
 OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://localhost:11434")
-STEPS = int(os.environ.get("IMAGE_STEPS", "6"))
-GUIDANCE = float(os.environ.get("IMAGE_GUIDANCE", "1.5"))
+_DEFAULT_STEPS = {"sdxl": 6, "sd-turbo": 1, "sd15": 20}
+_DEFAULT_GUIDANCE = {"sdxl": 1.5, "sd-turbo": 0.0, "sd15": 7.5}
+STEPS = int(os.environ.get("IMAGE_STEPS", str(_DEFAULT_STEPS[IMAGE_BACKEND])))
+GUIDANCE = float(os.environ.get("IMAGE_GUIDANCE", str(_DEFAULT_GUIDANCE[IMAGE_BACKEND])))
 IDLE_SECONDS = float(os.environ.get("IMAGE_IDLE_SECONDS", "90"))
 IDLE_CHECK_SECONDS = float(os.environ.get("IMAGE_IDLE_CHECK_SECONDS", "10"))
 OLLAMA_UNLOAD_TIMEOUT = float(os.environ.get("OLLAMA_UNLOAD_TIMEOUT", "30"))
@@ -36,12 +48,18 @@ NEGATIVE = (
     "eyeglasses, modern clothing, map, looking at camera, posed portrait"
 )
 
-# sdxl sizes near 1 megapixel
-BUCKETS = [
-    (1024, 1024), (896, 1152), (832, 1216), (768, 1344), (640, 1536),
-    (1152, 896), (1216, 832), (1344, 768), (1536, 640),
-]
-DEFAULT_SIZE = (832, 1216)
+# Keep resolutions appropriate to each model family. SD-Turbo and SD 1.5
+# are 512px-class models; asking them for SDXL-sized frames wastes VRAM and
+# often reduces quality. The final editor upscales/crops clips to the output size.
+BUCKETS = {
+    "sdxl": [
+        (1024, 1024), (896, 1152), (832, 1216), (768, 1344), (640, 1536),
+        (1152, 896), (1216, 832), (1344, 768), (1536, 640),
+    ],
+    "sd-turbo": [(512, 768), (512, 512), (768, 512)],
+    "sd15": [(512, 768), (512, 512), (768, 512)],
+}
+DEFAULT_SIZE = {"sdxl": (832, 1216), "sd-turbo": (512, 768), "sd15": (512, 768)}
 
 # one lock guards the pipeline and the gpu state below
 lock = threading.Lock()
@@ -71,10 +89,11 @@ class ImageRequest(BaseModel):
 
 
 def pick_size(size):
+    buckets = BUCKETS[IMAGE_BACKEND]
     if size is None:
-        return DEFAULT_SIZE
+        return DEFAULT_SIZE[IMAGE_BACKEND]
     w, h = (int(v) for v in size.split("x"))
-    return min(BUCKETS, key=lambda b: abs(b[0] / b[1] - w / h))
+    return min(buckets, key=lambda b: abs(b[0] / b[1] - w / h))
 
 
 def build_prompts(prompt):
@@ -122,14 +141,34 @@ def unload_ollama():
 
 def load_pipeline():
     import torch
-    from diffusers import DPMSolverMultistepScheduler, StableDiffusionXLPipeline
+    from diffusers import DPMSolverMultistepScheduler, StableDiffusionPipeline, StableDiffusionXLPipeline
 
-    p = StableDiffusionXLPipeline.from_pretrained(MODEL, torch_dtype=torch.float16, variant="fp16")
-    p.scheduler = DPMSolverMultistepScheduler.from_config(
-        p.scheduler.config,
-        algorithm_type="sde-dpmsolver++",
-        use_karras_sigmas=True,
+    if IMAGE_BACKEND == "sdxl":
+        p = StableDiffusionXLPipeline.from_pretrained(
+            MODEL, torch_dtype=torch.float16, variant="fp16"
+        )
+        p.scheduler = DPMSolverMultistepScheduler.from_config(
+            p.scheduler.config,
+            algorithm_type="sde-dpmsolver++",
+            use_karras_sigmas=True,
+        )
+        return p
+
+    # SD-Turbo is distilled for one-step inference and must not inherit the
+    # multi-step SDXL scheduler or guidance settings. SD 1.5 uses a conventional
+    # DPM solver and a higher step count.
+    p = StableDiffusionPipeline.from_pretrained(
+        MODEL,
+        torch_dtype=torch.float16,
+        safety_checker=None,
+        requires_safety_checker=False,
     )
+    if IMAGE_BACKEND == "sd15":
+        p.scheduler = DPMSolverMultistepScheduler.from_config(
+            p.scheduler.config,
+            algorithm_type="dpmsolver++",
+            use_karras_sigmas=True,
+        )
     return p
 
 
@@ -157,15 +196,17 @@ def claim_gpu():
 def paint(p, prompt, negative, width, height):
     import torch
 
-    return p(
-        prompt=prompt,
-        negative_prompt=negative,
-        width=width,
-        height=height,
-        num_inference_steps=STEPS,
-        guidance_scale=GUIDANCE,
-        generator=torch.Generator("cuda").manual_seed(random.randint(0, 2**31 - 1)),
-    ).images[0]
+    options = {
+        "prompt": prompt,
+        "width": width,
+        "height": height,
+        "num_inference_steps": STEPS,
+        "guidance_scale": GUIDANCE,
+        "generator": torch.Generator("cuda").manual_seed(random.randint(0, 2**31 - 1)),
+    }
+    if IMAGE_BACKEND != "sd-turbo":
+        options["negative_prompt"] = negative
+    return p(**options).images[0]
 
 
 def offload_if_idle():
@@ -209,6 +250,8 @@ def health():
         "ok": True,
         "on_gpu": on_gpu,
         "idle_worker": bool(idle_thread and idle_thread.is_alive()),
+        "backend": IMAGE_BACKEND,
+        "model": MODEL,
     }
 
 
@@ -219,7 +262,7 @@ def models():
 
 @app.post("/warmup")
 def warmup():
-    """Load the local image model before a paid-workflow request can reach it."""
+    """Load the selected local image model before a generation request can reach it."""
     global last_used
     with lock:
         claim_gpu()
