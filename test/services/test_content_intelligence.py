@@ -50,3 +50,32 @@ def test_audit_keeps_decimal_numbers_intact():
 
     assert report["numeric_claims_to_verify"] == ["2.5", "25"]
     assert report["sentence_count"] == 1
+
+def test_audit_flags_long_sentences_and_repetitive_openings():
+    long_sentence = (
+        "The brain can adapt throughout life because repeated experiences "
+        "change the strength of connections between neurons in ways that "
+        "support learning, memory, and the development of new skills."
+    )
+    report = audit_script(
+        long_sentence
+        + " The brain can also change with practice. "
+        + "The brain can continue responding to experience."
+    )
+
+    assert report["long_sentence_numbers"] == [1]
+    assert report["average_sentence_words"] > 0
+    assert report["sentence_word_counts"][0] > 28
+    assert "long_sentences_check_spoken_cadence" in report["warnings"]
+    assert report["repeated_sentence_openings"] == ["the brain can"]
+    assert "repeated_sentence_openings" in report["warnings"]
+
+
+def test_audit_flags_an_overlong_opening_sentence():
+    report = audit_script(
+        "A detailed explanation of a complicated subject can lose viewers "
+        "when the opening sentence takes too long to establish its central idea "
+        "before the viewer understands why the topic matters."
+    )
+
+    assert "opening_sentence_too_long_for_short_form" in report["warnings"]
