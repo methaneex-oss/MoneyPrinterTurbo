@@ -15,7 +15,7 @@ def test_colab_notebook_tracks_active_branch_and_persists_task_state():
     checkout_cell = next(cell for cell in code_cells if "REPO_BRANCH" in cell)
     config_cell = next(cell for cell in code_cells if "task_state_dir" in cell)
 
-    assert 'REPO_BRANCH = "feat/scene-composition-engine"' in checkout_cell
+    assert 'REPO_BRANCH = "feat/free-ai-video-colab-setup-20261122"' in checkout_cell
     assert '"pull", "--ff-only", "origin", REPO_BRANCH' in checkout_cell
     assert "/content/drive/MyDrive/MoneyPrinterTurbo/task-state" in config_cell
 
@@ -59,3 +59,24 @@ def test_colab_local_ai_image_setup_is_syntax_valid_and_has_safe_fallback():
     assert 'app["openai_image_api_keys"] = []' in image_cell
     assert 'set_video_source("pixabay")' in image_cell
     assert image_cell.index("warmup_request") < image_cell.rindex('set_video_source(\n            "openai_image"')
+
+
+def test_colab_animatediff_setup_is_syntax_valid_and_isolated():
+    notebook_path = Path(__file__).resolve().parents[2] / "docs" / "MoneyPrinterTurbo.ipynb"
+    notebook = json.loads(notebook_path.read_text(encoding="utf-8"))
+    code_cells = [
+        "".join(cell.get("source", []))
+        for cell in notebook["cells"]
+        if cell.get("cell_type") == "code"
+    ]
+    video_cell = next(cell for cell in code_cells if "VIDEO_ENV" in cell)
+
+    ast.parse(video_cell)
+    assert "--system-site-packages" in video_cell
+    assert "docs/local-video-models/requirements.txt" in video_cell
+    assert "torch.cuda.is_available()" in video_cell
+    assert "vram_gib < 8" in video_cell
+    assert "free_disk_gib < 12" in video_cell
+    assert "paid fallback" in video_cell
+    assert "model-cache/huggingface" in video_cell
+    assert "animatediff-benchmark.mp4" in video_cell
