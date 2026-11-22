@@ -2,9 +2,11 @@ from PIL import Image
 
 from app.services.scene_animation import (
     build_scene_label_card,
+    build_scene_progress_frame,
     first_scene_label_indices,
     normalize_scene_label,
     scene_label_x,
+    scene_progress_width,
 )
 
 
@@ -29,6 +31,26 @@ def test_scene_label_slides_in_holds_and_slides_out():
     assert scene_label_x(0.5, card_width, target_x, duration) == target_x
     assert scene_label_x(1.99, card_width, target_x, duration) < -card_width + 10
 
+
+def test_scene_progress_width_is_eased_bounded_and_handles_invalid_duration():
+    assert scene_progress_width(0, 2, 100) == 0
+    assert scene_progress_width(1, 2, 100) == 50
+    assert scene_progress_width(2, 2, 100) == 100
+    assert scene_progress_width(3, 2, 100) == 100
+    assert scene_progress_width(1, 0, 100) == 0
+    assert scene_progress_width(1, 2, 0) == 0
+
+
+def test_scene_progress_frame_is_transparent_and_grows_over_time():
+    start = build_scene_progress_frame(0, 2, (500, 124))
+    middle = build_scene_progress_frame(1, 2, (500, 124))
+    end = build_scene_progress_frame(2, 2, (500, 124))
+
+    assert start.shape == (124, 500, 4)
+    assert start.dtype.name == "uint8"
+    assert start[0, 0, 3] == 0
+    assert int((middle[:, :, 3] > 0).sum()) > int((start[:, :, 3] > 0).sum())
+    assert int((end[:, :, 3] > 0).sum()) > int((middle[:, :, 3] > 0).sum())
 
 
 def test_scene_labels_only_appear_at_first_occurrence_of_each_query():
