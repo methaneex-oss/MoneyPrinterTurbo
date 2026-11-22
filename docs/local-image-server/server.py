@@ -1,4 +1,4 @@
-"""OpenAI-compatible /v1/images/generations server running SDXL Lightning locally."""
+"""OpenAI-compatible local image server for SDXL, SD-Turbo, and SD 1.5."""
 
 import base64
 import io
