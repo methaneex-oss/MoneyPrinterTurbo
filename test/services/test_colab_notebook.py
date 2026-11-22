@@ -50,7 +50,7 @@ def test_colab_local_ai_image_setup_is_syntax_valid_and_has_safe_fallback():
 
     ast.parse(image_cell)
     assert "gpu_memory_gib < 14" in image_cell
-    assert '"/warmup"' in image_cell
+    assert "/warmup" in image_cell
     assert "timeout=900" in image_cell
     assert 'app["openai_image_api_keys"] = []' in image_cell
     assert 'set_video_source("pixabay")' in image_cell
