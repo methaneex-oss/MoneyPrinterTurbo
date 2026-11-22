@@ -1,0 +1,6 @@
+# Install PyTorch from the Colab runtime's CUDA-compatible wheel before this file.
+diffusers==0.32.2
+transformers==4.47.1
+accelerate==1.2.1
+safetensors>=0.4.5,<1
+imageio[ffmpeg]>=2.36,<3
