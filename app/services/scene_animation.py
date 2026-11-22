@@ -192,11 +192,20 @@ def add_scene_label(
         target_y,
     )
     overlay = ImageClip(np.asarray(card)).with_duration(duration).with_position(position)
-    progress_overlay = VideoClip(
-        lambda t: build_scene_progress_frame(
+    def progress_frame(t):
+        return build_scene_progress_frame(
             t, duration, (card_width, card_height)
-        ),
+        )
+
+    progress_overlay = VideoClip(
+        lambda t: progress_frame(t)[:, :, :3],
         duration=duration,
+    ).with_mask(
+        VideoClip(
+            lambda t: progress_frame(t)[:, :, 3].astype(np.float32) / 255.0,
+            is_mask=True,
+            duration=duration,
+        )
     ).with_position(position)
     return CompositeVideoClip(
         [clip, overlay, progress_overlay],
