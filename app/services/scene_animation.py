@@ -11,7 +11,7 @@ from __future__ import annotations
 import re
 
 import numpy as np
-from moviepy import CompositeVideoClip, ImageClip
+from moviepy import CompositeVideoClip, ImageClip, VideoClip
 from PIL import Image, ImageDraw, ImageFont
 
 
@@ -73,6 +73,43 @@ def scene_label_x(
     return int(round(target_x - (target_x + card_width) * eased))
 
 
+def scene_progress_width(time_seconds: float, duration: float, track_width: int) -> int:
+    """Return the eased width of the animated scene progress indicator."""
+    if duration <= 0 or track_width <= 0:
+        return 0
+    progress = max(0.0, min(1.0, time_seconds / duration))
+    eased = progress * progress * (3.0 - 2.0 * progress)
+    return int(round(track_width * eased))
+
+
+def build_scene_progress_frame(
+    time_seconds: float,
+    duration: float,
+    card_size: tuple[int, int],
+) -> np.ndarray:
+    """Render a transparent frame containing a smoothly growing progress rail."""
+    width, height = card_size
+    frame = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(frame)
+    left = min(34, max(8, width // 12))
+    right = max(left + 1, width - left)
+    track_width = right - left
+    y = height - 13
+    draw.rounded_rectangle(
+        (left, y, right, y + 3),
+        radius=2,
+        fill=(255, 255, 255, 54),
+    )
+    filled = scene_progress_width(time_seconds, duration, track_width)
+    if filled:
+        draw.rounded_rectangle(
+            (left, y, min(right, left + filled), y + 3),
+            radius=2,
+            fill=(70, 211, 231, 255),
+        )
+    return np.asarray(frame)
+
+
 def _font(font_path: str | None, size: int):
     if font_path:
         try:
@@ -120,7 +157,9 @@ def build_scene_label_card(
     fitted = label
     while fitted and draw.textbbox((0, 0), fitted, font=title_font)[2] > max_text_width:
         fitted = fitted[:-2].rstrip() + "…"
-    draw.text((34, 52), fitted or label[:18], font=title_font, fill=(250, 252, 255, 255))
+    draw.text(
+        (34, 52), fitted or label[:18], font=title_font, fill=(250, 252, 255, 255)
+    )
     return card
 
 
@@ -131,7 +170,7 @@ def add_scene_label(
     scene_index: int,
     font_path: str | None = None,
 ):
-    """Composite a short animated scene label over a MoviePy clip."""
+    """Composite a short animated scene label and progress rail over a clip."""
     label = normalize_scene_label(label)
     if not label or not getattr(clip, "duration", None):
         return clip
@@ -150,13 +189,32 @@ def add_scene_label(
     card_width, card_height = card.size
     target_x = max(24, int(width * 0.045))
     target_y = max(24, int(height * 0.085))
-    overlay = ImageClip(np.asarray(card)).with_duration(duration).with_position(
-        lambda t: (
-            scene_label_x(t, card_width, target_x, duration),
-            target_y,
-        )
+    position = lambda t: (
+        scene_label_x(t, card_width, target_x, duration),
+        target_y,
     )
+    overlay = (
+        ImageClip(np.asarray(card))
+        .with_duration(duration)
+        .with_position(position)
+    )
+
+    def progress_frame(t):
+        return build_scene_progress_frame(
+            t, duration, (card_width, card_height)
+        )
+
+    progress_overlay = VideoClip(
+        lambda t: progress_frame(t)[:, :, :3],
+        duration=duration,
+    ).with_mask(
+        VideoClip(
+            lambda t: progress_frame(t)[:, :, 3].astype(np.float32) / 255.0,
+            is_mask=True,
+            duration=duration,
+        )
+    ).with_position(position)
     return CompositeVideoClip(
-        [clip, overlay],
+        [clip, overlay, progress_overlay],
         size=(width, height),
     ).with_duration(float(clip.duration))

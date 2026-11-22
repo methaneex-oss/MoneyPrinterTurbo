@@ -1,10 +1,14 @@
 from PIL import Image
+from moviepy import ColorClip
 
 from app.services.scene_animation import (
     build_scene_label_card,
+    add_scene_label,
+    build_scene_progress_frame,
     first_scene_label_indices,
     normalize_scene_label,
     scene_label_x,
+    scene_progress_width,
 )
 
 
@@ -30,6 +34,28 @@ def test_scene_label_slides_in_holds_and_slides_out():
     assert scene_label_x(1.99, card_width, target_x, duration) < -card_width + 10
 
 
+def test_scene_progress_width_is_eased_bounded_and_handles_invalid_duration():
+    assert scene_progress_width(0, 2, 100) == 0
+    assert scene_progress_width(1, 2, 100) == 50
+    assert scene_progress_width(2, 2, 100) == 100
+    assert scene_progress_width(3, 2, 100) == 100
+    assert scene_progress_width(1, 0, 100) == 0
+    assert scene_progress_width(1, 2, 0) == 0
+
+
+def test_scene_progress_frame_is_transparent_and_grows_over_time():
+    start = build_scene_progress_frame(0, 2, (500, 124))
+    middle = build_scene_progress_frame(1, 2, (500, 124))
+    end = build_scene_progress_frame(2, 2, (500, 124))
+
+    assert start.shape == (124, 500, 4)
+    assert start.dtype.name == "uint8"
+    assert start[0, 0, 3] == 0
+    # The rail remains visible, while its cyan foreground advances over time.
+    assert tuple(start[112, 100, :3]) != tuple(middle[112, 100, :3])
+    assert tuple(middle[112, 350, :3]) == tuple(start[112, 350, :3])
+    assert tuple(end[112, 350, :3]) != tuple(middle[112, 350, :3])
+
 
 def test_scene_labels_only_appear_at_first_occurrence_of_each_query():
     paths = ["shot-a.mp4", "shot-b.mp4", "shot-c.mp4", "shot-d.mp4"]
@@ -48,3 +74,17 @@ def test_scene_labels_only_appear_at_first_occurrence_of_each_query():
 
 def test_scene_labels_without_manifest_return_no_overlays():
     assert first_scene_label_indices(["shot.mp4"], None) == {}
+
+
+def test_add_scene_label_composites_motion_graphics_without_changing_duration():
+    base = ColorClip(size=(720, 1280), color=(10, 10, 10)).with_duration(3)
+    rendered = add_scene_label(base, "Ocean waves", scene_index=1)
+
+    assert rendered is not base
+    assert rendered.size == base.size
+    assert rendered.duration == base.duration
+
+    frame = rendered.get_frame(1.0)
+    original = base.get_frame(1.0)
+    assert frame.shape == (1280, 720, 3)
+    assert (frame[100:240, 30:600] != original[100:240, 30:600]).any()

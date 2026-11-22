@@ -124,8 +124,11 @@ class TestTaskService(unittest.TestCase):
         params = VideoParams(video_subject="test", video_count=1)
         inspected = []
 
+        forwarded_scene_labels = []
+
         def fake_combine(**kwargs):
             kwargs["used_video_paths"].append("selected.mp4")
+            forwarded_scene_labels.append(kwargs.get("scene_labels"))
 
         def fake_score(video_path, scene_text, *, sample_count):
             inspected.append((video_path, scene_text, sample_count))
@@ -162,6 +165,13 @@ class TestTaskService(unittest.TestCase):
                 audio_duration=5,
             )
 
+        self.assertEqual(
+            forwarded_scene_labels,
+            [{
+                "selected.mp4": "a scientist working in a laboratory",
+                "unused.mp4": "a scientist working in a laboratory",
+            }],
+        )
         self.assertEqual(
             inspected,
             [("selected.mp4", "a scientist working in a laboratory", 3)],
