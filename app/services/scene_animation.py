@@ -192,6 +192,7 @@ def add_scene_label(
         target_y,
     )
     overlay = ImageClip(np.asarray(card)).with_duration(duration).with_position(position)
+
     def progress_frame(t):
         return build_scene_progress_frame(
             t, duration, (card_width, card_height)
