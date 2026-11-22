@@ -76,6 +76,20 @@ def post_image(client, **body):
     return client.post("/v1/images/generations", json={"prompt": "mountain", **body})
 
 
+def test_warmup_loads_model_without_generating_an_image(server):
+    response = server.client.post("/warmup")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "ok": True,
+        "model": srv.MODEL,
+        "on_gpu": True,
+    }
+    assert server.pipe.devices == ["cuda"]
+    assert srv.last_used > 0
+    assert server.painted == []
+
+
 @pytest.mark.parametrize("size", ["1024x0", "0x1024", "-1x1024", "1024", "axb", "1024x1536x2", "x"])
 def test_invalid_size_is_rejected(server, size):
     r = post_image(server.client, size=size)
