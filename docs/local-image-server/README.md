@@ -64,9 +64,7 @@ The server can't stop Ollama from loading while an image is painting. Running LL
 | `IMAGE_MODEL` | backend-specific default | Hugging Face model id override |
 | `IMAGE_STEPS` | backend-specific | SDXL 6, SD-Turbo 1, SD 1.5 20 |
 | `IMAGE_GUIDANCE` | backend-specific | SDXL 1.5, SD-Turbo 0, SD 1.5 7.5 |
-| `IMAGE_STEPS` | `6` | |
-| `IMAGE_GUIDANCE` | `1.5` | |
-| `IMAGE_IDLE_SECONDS` | `90` | idle time before SDXL moves to the CPU |
+| `IMAGE_IDLE_SECONDS` | `90` | idle time before the selected pipeline moves to the CPU |
 | `IMAGE_IDLE_CHECK_SECONDS` | `10` | how often the idle worker checks |
 | `IMAGE_PORT` | `7861` | used by `python server.py` |
 | `OLLAMA_URL` | `http://localhost:11434` | |
