@@ -49,7 +49,11 @@ def test_colab_local_ai_image_setup_is_syntax_valid_and_has_safe_fallback():
     image_cell = next(cell for cell in code_cells if "IMAGE_SERVER_DIR" in cell)
 
     ast.parse(image_cell)
-    assert "gpu_memory_gib < 14" in image_cell
+    assert "gpu_memory_gib < 8" in image_cell
+    assert 'image_backend = "sdxl" if gpu_memory_gib >= 14 else "sd-turbo"' in image_cell
+    assert 'image_server_env["IMAGE_BACKEND"] = image_backend' in image_cell
+    assert 'image_server_env["IMAGE_MODEL"] = image_model' in image_cell
+    assert 'warmup_result.get("backend") != image_backend' in image_cell
     assert "/warmup" in image_cell
     assert "timeout=900" in image_cell
     assert 'app["openai_image_api_keys"] = []' in image_cell

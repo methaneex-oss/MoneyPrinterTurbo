@@ -4,6 +4,7 @@ import socket
 import subprocess
 import sys
 import time
+import types
 from pathlib import Path
 
 import pytest
@@ -83,6 +84,7 @@ def test_warmup_loads_model_without_generating_an_image(server):
     assert response.json() == {
         "ok": True,
         "model": srv.MODEL,
+        "backend": srv.IMAGE_BACKEND,
         "on_gpu": True,
     }
     assert server.pipe.devices == ["cuda"]
@@ -228,3 +230,45 @@ def test_idle_worker_starts_in_both_launch_modes(launch):
     finally:
         proc.terminate()
         proc.wait(timeout=10)
+
+
+
+def test_sd_turbo_uses_512_class_portrait_bucket(monkeypatch):
+    monkeypatch.setattr(srv, "IMAGE_BACKEND", "sd-turbo")
+    assert srv.pick_size("1080x1920") == (512, 768)
+
+
+def test_sd15_uses_512_class_portrait_bucket(monkeypatch):
+    monkeypatch.setattr(srv, "IMAGE_BACKEND", "sd15")
+    assert srv.pick_size("1080x1920") == (512, 768)
+
+
+def test_sd_turbo_uses_one_step_without_classifier_free_guidance(monkeypatch):
+    calls = []
+
+    class FakeGenerator:
+        def __init__(self, device):
+            assert device == "cuda"
+
+        def manual_seed(self, seed):
+            return self
+
+    fake_torch = types.ModuleType("torch")
+    fake_torch.Generator = FakeGenerator
+
+    class FakePipeline:
+        def __call__(self, **kwargs):
+            calls.append(kwargs)
+            return type("Result", (), {"images": [Image.new("RGB", (8, 8))]})()
+
+    monkeypatch.setitem(sys.modules, "torch", fake_torch)
+    monkeypatch.setattr(srv, "IMAGE_BACKEND", "sd-turbo")
+    monkeypatch.setattr(srv, "STEPS", 1)
+    monkeypatch.setattr(srv, "GUIDANCE", 0.0)
+
+    result = srv.paint(FakePipeline(), "cinematic mountain", "unused negative", 512, 768)
+
+    assert result.size == (8, 8)
+    assert calls[0]["num_inference_steps"] == 1
+    assert calls[0]["guidance_scale"] == 0.0
+    assert "negative_prompt" not in calls[0]
