@@ -1,7 +1,9 @@
 from PIL import Image
+from moviepy import ColorClip
 
 from app.services.scene_animation import (
     build_scene_label_card,
+    add_scene_label,
     build_scene_progress_frame,
     first_scene_label_indices,
     normalize_scene_label,
@@ -72,3 +74,17 @@ def test_scene_labels_only_appear_at_first_occurrence_of_each_query():
 
 def test_scene_labels_without_manifest_return_no_overlays():
     assert first_scene_label_indices(["shot.mp4"], None) == {}
+
+
+def test_add_scene_label_composites_motion_graphics_without_changing_duration():
+    base = ColorClip(size=(720, 1280), color=(10, 10, 10)).with_duration(3)
+    rendered = add_scene_label(base, "Ocean waves", scene_index=1)
+
+    assert rendered is not base
+    assert rendered.size == base.size
+    assert rendered.duration == base.duration
+
+    frame = rendered.get_frame(1.0)
+    original = base.get_frame(1.0)
+    assert frame.shape == (1280, 720, 3)
+    assert (frame[100:240, 30:600] != original[100:240, 30:600]).any()
