@@ -4,6 +4,7 @@ import socket
 import subprocess
 import sys
 import time
+import types
 from pathlib import Path
 
 import pytest
@@ -252,15 +253,15 @@ def test_sd_turbo_uses_one_step_without_classifier_free_guidance(monkeypatch):
         def manual_seed(self, seed):
             return self
 
-    class FakeTorch:
-        Generator = FakeGenerator
+    fake_torch = types.ModuleType("torch")
+    fake_torch.Generator = FakeGenerator
 
     class FakePipeline:
         def __call__(self, **kwargs):
             calls.append(kwargs)
             return type("Result", (), {"images": [Image.new("RGB", (8, 8))]})()
 
-    monkeypatch.setitem(sys.modules, "torch", FakeTorch)
+    monkeypatch.setitem(sys.modules, "torch", fake_torch)
     monkeypatch.setattr(srv, "IMAGE_BACKEND", "sd-turbo")
     monkeypatch.setattr(srv, "STEPS", 1)
     monkeypatch.setattr(srv, "GUIDANCE", 0.0)
