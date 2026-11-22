@@ -55,7 +55,7 @@ def test_audit_flags_long_sentences_and_repetitive_openings():
     long_sentence = (
         "The brain can adapt throughout life because repeated experiences "
         "change the strength of connections between neurons in ways that "
-        "support learning, memory, and the development of new skills."
+        "support learning, memory, and the development of new skills over time."
     )
     report = audit_script(
         long_sentence
