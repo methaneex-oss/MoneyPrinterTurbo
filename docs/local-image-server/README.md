@@ -2,7 +2,13 @@
 
 Stock footage often has little to do with the script. The `openai_image` source fixes that by generating one image per script segment. This folder has a small server that does it on your own GPU, so there are no per-image costs.
 
-It exposes the OpenAI `/v1/images/generations` API and runs [RealVisXL V5.0 Lightning](https://huggingface.co/SG161222/RealVisXL_V5.0_Lightning), a photoreal SDXL model that needs about 6 steps per image.
+It exposes the OpenAI `/v1/images/generations` API and supports three local model backends:
+
+- `sdxl` (default): [RealVisXL V5.0 Lightning](https://huggingface.co/SG161222/RealVisXL_V5.0_Lightning), higher-quality SDXL output, 6 steps.
+- `sd-turbo`: [Stability AI SD-Turbo](https://huggingface.co/stabilityai/sd-turbo), one-step generation with lower VRAM demand. This is the automatic fallback for Colab GPUs with 8–14 GiB.
+- `sd15`: [Stable Diffusion 1.5](https://huggingface.co/stable-diffusion-v1-5/stable-diffusion-v1-5), a conventional 512px model with a slower 20-step profile.
+
+Set `IMAGE_BACKEND` and optionally `IMAGE_MODEL` before starting the server. The Colab notebook selects SDXL at 14 GiB or more, SD-Turbo at 8–14 GiB, and Pixabay below 8 GiB. The 512px models use smaller aspect-ratio buckets; the final editor scales them to the output canvas.
 
 Tested on an RTX 5070 Ti (16 GB):
 
@@ -21,7 +27,7 @@ python -m venv .venv
 
 `uvicorn server:app --port 7861` works the same way: the idle worker starts with the app either way.
 
-The first request downloads the fp16 weights, about 6.6 GB. The server listens on `http://127.0.0.1:7861`. A `size` that isn't `WIDTHxHEIGHT` with positive numbers gets a 422 response.
+The first request downloads the selected model weights. SDXL Lightning is about 6.6 GB; SD-Turbo and SD 1.5 are smaller. The server listens on `http://127.0.0.1:7861`. A `size` that isn't `WIDTHxHEIGHT` with positive numbers gets a 422 response.
 
 For Colab, the notebook checks for a CUDA GPU with at least 14 GiB VRAM, starts this server, and calls `POST /warmup` before enabling the local image source. Warmup downloads and loads the weights before a video task begins, avoiding a long first-request download. The endpoint returns the model name and whether it is resident on the GPU. The idle worker can still move the model back to CPU after `IMAGE_IDLE_SECONDS`.
 
@@ -54,7 +60,10 @@ The server can't stop Ollama from loading while an image is painting. Running LL
 
 | Variable | Default | |
 |---|---|---|
-| `IMAGE_MODEL` | `SG161222/RealVisXL_V5.0_Lightning` | any SDXL repo with fp16 weights |
+| `IMAGE_BACKEND` | `sdxl` | `sdxl`, `sd-turbo`, or `sd15` |
+| `IMAGE_MODEL` | backend-specific default | Hugging Face model id override |
+| `IMAGE_STEPS` | backend-specific | SDXL 6, SD-Turbo 1, SD 1.5 20 |
+| `IMAGE_GUIDANCE` | backend-specific | SDXL 1.5, SD-Turbo 0, SD 1.5 7.5 |
 | `IMAGE_STEPS` | `6` | |
 | `IMAGE_GUIDANCE` | `1.5` | |
 | `IMAGE_IDLE_SECONDS` | `90` | idle time before SDXL moves to the CPU |
