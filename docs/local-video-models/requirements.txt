@@ -1,8 +1,11 @@
-# PyTorch is supplied by the CUDA-enabled Colab runtime.
+# PyTorch, FastAPI, Uvicorn, ImageIO and imageio-ffmpeg are already installed
+# in the MoneyPrinterTurbo Colab runtime; keep this isolated environment aligned
+# with the repository lock while adding only the local video-model stack.
 diffusers==0.32.2
 transformers==4.47.1
 accelerate==1.2.1
 safetensors>=0.4.5,<1
-imageio[ffmpeg]>=2.36,<3
-fastapi==0.115.6
-uvicorn==0.34.0
+fastapi==0.136.3
+uvicorn==0.32.1
+imageio==2.37.3
+imageio-ffmpeg==0.6.0
