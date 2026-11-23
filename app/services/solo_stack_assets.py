@@ -101,6 +101,20 @@ def register_asset(
     size = source.stat().st_size
     if size <= 0 or size > MAX_ASSET_BYTES:
         raise SoloStackAssetError("Asset must be between 1 byte and 100 MiB.")
+    if suffix in {".png", ".jpg", ".jpeg", ".webp"}:
+        try:
+            from PIL import Image
+            with Image.open(source) as image:
+                image.verify()
+        except Exception as exc:
+            raise SoloStackAssetError("Image asset is not a valid decodable image.") from exc
+    else:
+        with source.open("rb") as media:
+            header = media.read(16)
+        is_mp4 = suffix in {".mp4", ".mov"} and len(header) >= 8 and header[4:8] == b"ftyp"
+        is_webm = suffix == ".webm" and header.startswith(b"\\x1a\\x45\\xdf\\xa3")
+        if not (is_mp4 or is_webm):
+            raise SoloStackAssetError("Video asset does not have a valid MP4/MOV or WebM container header.")
     if captured_at:
         try:
             date.fromisoformat(captured_at)
