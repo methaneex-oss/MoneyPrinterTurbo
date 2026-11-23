@@ -109,8 +109,8 @@ def generate(request: GenerateRequest):
     if PIPELINE is None:
         raise HTTPException(status_code=503, detail="AnimateDiff model is not ready")
     dimensions = {
-        "portrait": (512, 768),
-        "landscape": (768, 512),
+        "portrait": (384, 672),
+        "landscape": (672, 384),
         "square": (512, 512),
     }
     width, height = dimensions[request.aspect]
