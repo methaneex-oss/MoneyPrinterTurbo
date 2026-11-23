@@ -30,3 +30,6 @@ def test_animatediff_server_rejects_parallel_generation_and_bounds_requests():
     assert "max_length=1200" in source
     assert "ge=8, le=20" in source
     assert "num_frames=16" in source
+    assert '"portrait": (384, 672)' in source
+    assert '"landscape": (672, 384)' in source
+    assert "imageio_ffmpeg.get_ffmpeg_exe()" in source
