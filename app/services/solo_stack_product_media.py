@@ -264,51 +264,55 @@ def prepare_episode_product_visuals(
                 locale="en-US",
             )
             for product in products:
-                spec = PRODUCTS[product]
-                product_dir = media_dir / re.sub(r"[^a-z0-9]+", "-", product.casefold()).strip("-")
-                product_dir.mkdir(parents=True, exist_ok=True)
-                page.goto(spec["url"], wait_until="domcontentloaded", timeout=45000)
-                page.wait_for_timeout(2500)
-                page.evaluate("window.scrollTo(0, Math.min(650, document.body.scrollHeight))")
-                page.wait_for_timeout(900)
-                source_page = page.url
-                parsed = urlparse(source_page)
-                if parsed.scheme != "https" or not (
-                    parsed.hostname == spec["domain"]
-                    or parsed.hostname.endswith("." + spec["domain"])
-                ):
-                    logger.warning("Official page redirected outside its allowlisted domain: %s", source_page)
+                try:
+                    spec = PRODUCTS[product]
+                    product_dir = media_dir / re.sub(r"[^a-z0-9]+", "-", product.casefold()).strip("-")
+                    product_dir.mkdir(parents=True, exist_ok=True)
+                    page.goto(spec["url"], wait_until="domcontentloaded", timeout=45000)
+                    page.wait_for_timeout(2500)
+                    page.evaluate("window.scrollTo(0, Math.min(650, document.body.scrollHeight))")
+                    page.wait_for_timeout(900)
+                    source_page = page.url
+                    parsed = urlparse(source_page)
+                    if parsed.scheme != "https" or not (
+                        parsed.hostname == spec["domain"]
+                        or parsed.hostname.endswith("." + spec["domain"])
+                    ):
+                        logger.warning("Official page redirected outside its allowlisted domain: %s", source_page)
+                        continue
+    
+                    images = _download_page_images(page, product_dir)
+                    if not images:
+                        screenshot = product_dir / "official-product-page.png"
+                        page.screenshot(path=str(screenshot), full_page=False)
+                        images = [(screenshot, source_page)]
+    
+                    for image_index, (source_image, image_url) in enumerate(images, start=1):
+                        card = product_dir / f"visual-card-{image_index}.jpg"
+                        clip = product_dir / f"product-visual-{image_index}.mp4"
+                        _make_editorial_card(source_image, card, product, aspect, spec["domain"])
+                        _render_still_clip(card, clip, duration, aspect)
+                        digest = hashlib.sha256(source_image.read_bytes()).hexdigest()
+                        manifest["assets"].append({
+                            "product": product,
+                            "asset_type": "official_product_page_image" if image_url != source_page
+                                          else "official_product_page_capture",
+                            "file": str(source_image.relative_to(task_dir)),
+                            "rendered_clip": str(clip.relative_to(task_dir)),
+                            "source_page": source_page,
+                            "source_asset_url": image_url,
+                            "sha256": digest,
+                            "captured_at": manifest["captured_at"],
+                            "note": "Public official-site visual; not an authenticated in-app task recording.",
+                        })
+                        clips.append(str(clip))
+                        material_records.append({
+                            "local_file": clip.name,
+                            "search_term": f"{product} official product interface",
+                        })
+                except Exception as exc:
+                    logger.warning("Could not capture official product visuals for %s: %s", product, exc)
                     continue
-
-                images = _download_page_images(page, product_dir)
-                if not images:
-                    screenshot = product_dir / "official-product-page.png"
-                    page.screenshot(path=str(screenshot), full_page=False)
-                    images = [(screenshot, source_page)]
-
-                for image_index, (source_image, image_url) in enumerate(images, start=1):
-                    card = product_dir / f"visual-card-{image_index}.jpg"
-                    clip = product_dir / f"product-visual-{image_index}.mp4"
-                    _make_editorial_card(source_image, card, product, aspect, spec["domain"])
-                    _render_still_clip(card, clip, duration, aspect)
-                    digest = hashlib.sha256(source_image.read_bytes()).hexdigest()
-                    manifest["assets"].append({
-                        "product": product,
-                        "asset_type": "official_product_page_image" if image_url != source_page
-                                      else "official_product_page_capture",
-                        "file": str(source_image.relative_to(task_dir)),
-                        "rendered_clip": str(clip.relative_to(task_dir)),
-                        "source_page": source_page,
-                        "source_asset_url": image_url,
-                        "sha256": digest,
-                        "captured_at": manifest["captured_at"],
-                        "note": "Public official-site visual; not an authenticated in-app task recording.",
-                    })
-                    clips.append(str(clip))
-                    material_records.append({
-                        "local_file": clip.name,
-                        "search_term": f"{product} official product interface",
-                    })
         finally:
             browser.close()
 
