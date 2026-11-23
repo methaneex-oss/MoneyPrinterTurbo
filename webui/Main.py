@@ -6241,6 +6241,36 @@ def _render_video_settings(panel, params):
                             if temporary_path:
                                 Path(temporary_path).unlink(missing_ok=True)
 
+                st.divider()
+                st.caption("Evidence ledger · record current prices, plan limits and feature claims with their sources.")
+                with st.form("solo_stack_evidence_form"):
+                    evidence_product = st.text_input("Evidence product")
+                    evidence_claim_id = st.text_input("Claim ID (letters, digits, dots, _ or -)")
+                    evidence_claim = st.text_area("Claim to verify")
+                    evidence_source = st.text_input("Source URL")
+                    evidence_publisher = st.text_input("Publisher")
+                    evidence_plan = st.text_input("Plan (optional)")
+                    evidence_value = st.text_input("Observed price or limit (optional)")
+                    evidence_currency = st.text_input("Currency (optional)")
+                    evidence_submitted = st.form_submit_button("Save sourced evidence")
+                if evidence_submitted:
+                    try:
+                        record = solo_stack_assets.add_evidence(
+                            utils.storage_dir("solo_stack"),
+                            claim_id=evidence_claim_id.strip(),
+                            product=evidence_product.strip(),
+                            claim=evidence_claim.strip(),
+                            source_url=evidence_source.strip(),
+                            publisher=evidence_publisher.strip(),
+                            checked_at=datetime.now().date().isoformat(),
+                            value=evidence_value.strip() or None,
+                            currency=evidence_currency.strip() or None,
+                            plan=evidence_plan.strip() or None,
+                        )
+                        st.success(f"Evidence recorded: {record['claim_id']}")
+                    except (solo_stack_assets.SoloStackAssetError, OSError) as exc:
+                        st.error(f"Evidence was not saved: {exc}")
+
             loomloom_video_capability = None
             if params.video_source == "loomloom":
                 # 尽早读取缓存，使下方画面比例控件直接受当前 Profile 约束。
