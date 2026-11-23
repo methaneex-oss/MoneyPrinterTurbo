@@ -28,7 +28,7 @@ _ACTIONS = {
     "thinking": ("think", "thoughtful", "up"),
     "celebrate": ("celebrate", "pleased", "camera"),
     "concerned": ("warn", "concerned", "evidence"),
-    "explaining": ("present", "engaged", "evidence"),
+    "explaining": ("present", "talk", "evidence"),
     "curious": ("question", "curious", "camera"),
 }
 _WARDROBE_CUES = {
