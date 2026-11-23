@@ -28,6 +28,14 @@ def _safe_name(value: str) -> str:
     return value
 
 
+def _safe_product(value: str) -> str:
+    if not isinstance(value, str) or not value.strip() or len(value.strip()) > 120:
+        raise SoloStackAssetError("Product name must contain 1–120 characters.")
+    if _CONTROL.search(value):
+        raise SoloStackAssetError("Product name contains invalid control characters.")
+    return value.strip()
+
+
 def validate_source_url(value: str | None) -> str | None:
     if value in (None, ""):
         return None
@@ -38,7 +46,7 @@ def validate_source_url(value: str | None) -> str | None:
         raise SoloStackAssetError("Source URL must be an absolute HTTP(S) URL.")
     if parsed.username is not None or parsed.password is not None:
         raise SoloStackAssetError("Credentials are not allowed in source URLs.")
-    return value.strip()
+    return urlunsplit((parsed.scheme, parsed.netloc, parsed.path, "", ""))
 
 
 def _manifest_path(project_dir: Path) -> Path:
@@ -81,7 +89,7 @@ def register_asset(
 ) -> dict:
     """Copy one genuine local capture into the episode library and record provenance."""
     asset_id = _safe_name(asset_id)
-    product = _safe_name(product)
+    product = _safe_product(product)
     if asset_type not in {"screenshot", "screen_recording", "demo_media", "logo"}:
         raise SoloStackAssetError("Unsupported asset type.")
     source = Path(source_path)
@@ -146,7 +154,7 @@ def add_evidence(
     plan: str | None = None,
 ) -> dict:
     """Record a sourced claim; never treats an unverified assertion as evidence."""
-    claim_id, product = _safe_name(claim_id), _safe_name(product)
+    claim_id, product = _safe_name(claim_id), _safe_product(product)
     if not isinstance(claim, str) or not claim.strip() or len(claim) > 2000:
         raise SoloStackAssetError("Evidence claim must contain 1–2,000 characters.")
     if not isinstance(publisher, str) or not publisher.strip() or len(publisher) > 160:
