@@ -118,6 +118,20 @@ def _download_page_images(page, destination: Path) -> list[tuple[Path, str]]:
           index
         }))"""
     )
+    # Official product pages frequently expose their hero/product screenshot
+    # through Open Graph metadata rather than a visible <img> element.
+    metadata_images = page.locator(
+        'meta[property="og:image"], meta[name="twitter:image"]'
+    ).evaluate_all(
+        """els => els.map((meta, index) => ({
+          src: meta.content || '',
+          alt: 'official product interface image',
+          width: 1200,
+          height: 675,
+          index: 10000 + index
+        }))"""
+    )
+    candidates.extend(metadata_images)
     candidates = [
         item for item in candidates
         if item["src"].startswith("https://")
