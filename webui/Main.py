@@ -6212,6 +6212,7 @@ def _render_video_settings(panel, params):
                     "Upload genuine app capture",
                     type=["png", "jpg", "jpeg", "webp", "mp4", "mov", "webm"],
                     key="solo_stack_capture_file",
+                    max_upload_size=100,
                 )
                 if st.button("Save app capture to Solo Stack library", key="solo_stack_save_capture"):
                     if not capture_product.strip() or capture_file is None:
