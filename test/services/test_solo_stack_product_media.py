@@ -6,6 +6,7 @@ from app.services.solo_stack_product_media import (
     PRODUCTS,
     _make_editorial_card,
     identify_products,
+    interleave_product_visuals,
 )
 
 
@@ -53,3 +54,23 @@ def test_image_extension_rejects_svg_and_non_image_content_types():
     assert _safe_image_extension("https://cdn.example.com/app.webp", "image/webp") == ".webp"
     assert _safe_image_extension("https://cdn.example.com/app", "image/jpeg; charset=binary") == ".jpg"
     assert _safe_image_extension("https://cdn.example.com/logo.svg", "image/svg+xml") is None
+
+
+
+def test_product_visuals_are_distributed_through_existing_timeline():
+    assert interleave_product_visuals(
+        ["stock-1.mp4", "stock-2.mp4", "stock-3.mp4", "stock-4.mp4"],
+        ["canva.mp4", "chatgpt.mp4"],
+    ) == [
+        "stock-1.mp4",
+        "canva.mp4",
+        "stock-2.mp4",
+        "stock-3.mp4",
+        "chatgpt.mp4",
+        "stock-4.mp4",
+    ]
+
+
+def test_timeline_is_unchanged_when_no_product_visuals_exist():
+    clips = ["stock-1.mp4", "stock-2.mp4"]
+    assert interleave_product_visuals(clips, []) == clips
