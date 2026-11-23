@@ -176,7 +176,7 @@ def interleave_product_visuals(existing_clips: list[str], product_clips: list[st
     result = []
     cursor = 0
     for index, clip in enumerate(visuals):
-        position = int((index + 1) * len(existing) / (len(visuals) + 1))
+        position = int((index + 1) * (len(existing) + 1) / (len(visuals) + 1))
         result.extend(existing[cursor:position])
         result.append(clip)
         cursor = position
