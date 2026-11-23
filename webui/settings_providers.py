@@ -12,6 +12,7 @@ from app.models.llm_provider import LLM_PROVIDER_REGISTRY
 from app.services import (
     infistar_video,
     jalapeno_video,
+    local_animatediff,
     loomloom,
     material,
     metaso_minimax,
@@ -104,6 +105,9 @@ def configured_material_providers(settings, groups, codex_connected=False):
             "muapi": muapi.is_enabled(settings),
             "useapi": useapi.is_enabled(settings),
             "useapi_image": useapi.is_enabled(settings),
+            "animatediff": bool(
+                _text(settings.get("animatediff_base_url", local_animatediff.DEFAULT_BASE_URL))
+            ),
             "openai_image": material.is_openai_image_enabled(settings),
             "codex_image": bool(
                 codex_connected and _text(settings.get("codex_image_model_name"))
