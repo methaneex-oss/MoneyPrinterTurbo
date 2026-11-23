@@ -126,7 +126,7 @@ def generate_videos(
         try:
             response = requests.post(
                 f"{base_url(settings)}/generate",
-                json={"prompt": prompt, "aspect": aspect, "seed": int(digest, 16), "steps": 12},
+                json={"prompt": prompt, "aspect": aspect, "seed": int(digest, 16) % (2**32), "steps": 12},
                 timeout=REQUEST_TIMEOUT,
                 stream=True,
             )
