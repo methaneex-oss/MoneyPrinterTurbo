@@ -284,3 +284,11 @@ def test_infistar_video_does_not_accept_separate_llm_key():
     )
     assert "infistar" not in result["ai_video"]
 
+
+
+def test_animatediff_readiness_requires_notebook_configured_loopback_endpoint():
+    groups = {"ai_video": ("animatediff",)}
+    assert settings_providers.configured_material_providers({}, groups)["ai_video"] == ()
+    assert settings_providers.configured_material_providers(
+        {"animatediff_base_url": "http://127.0.0.1:7862"}, groups
+    )["ai_video"] == ("animatediff",)
