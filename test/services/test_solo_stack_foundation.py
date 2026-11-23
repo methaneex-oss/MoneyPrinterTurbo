@@ -27,7 +27,7 @@ def test_presenter_expressions_change_visual_output():
 
 def test_asset_registration_copies_and_hash_verifies(tmp_path):
     source = tmp_path / "capture.png"
-    source.write_bytes(b"genuine screenshot bytes")
+    Image.new("RGB", (16, 16), (20, 40, 60)).save(source)
     project = tmp_path / "episode"
     record = register_asset(
         source, project, asset_id="chatgpt-home", product="ChatGPT",
@@ -41,7 +41,7 @@ def test_asset_registration_copies_and_hash_verifies(tmp_path):
 
 def test_asset_registration_rejects_symlink_and_oversized_file(tmp_path):
     source = tmp_path / "real.png"
-    source.write_bytes(b"x")
+    Image.new("RGB", (2, 2)).save(source)
     link = tmp_path / "link.png"
     link.symlink_to(source)
     with pytest.raises(SoloStackAssetError):
@@ -52,7 +52,7 @@ def test_asset_registration_rejects_symlink_and_oversized_file(tmp_path):
 
 def test_asset_registration_rejects_duplicate_id(tmp_path):
     source = tmp_path / "capture.webp"
-    source.write_bytes(b"capture")
+    Image.new("RGB", (2, 2)).save(source)
     project = tmp_path / "episode"
     register_asset(source, project, asset_id="one", product="Canva", asset_type="screenshot")
     with pytest.raises(SoloStackAssetError):
@@ -80,8 +80,18 @@ def test_evidence_requires_source_and_checked_date(tmp_path):
 
 def test_manifest_tampering_is_detected(tmp_path):
     source = tmp_path / "capture.jpg"
-    source.write_bytes(b"first")
+    Image.new("RGB", (2, 2), (10, 20, 30)).save(source)
     project = tmp_path / "episode"
     register_asset(source, project, asset_id="one", product="Tool", asset_type="screenshot")
-    (project / "assets" / "one.jpg").write_bytes(b"changed")
+    Image.new("RGB", (2, 2), (40, 50, 60)).save(project / "assets" / "one.jpg")
     assert not verify_asset(project, "one")
+
+
+def test_asset_registration_rejects_fake_image_bytes(tmp_path):
+    source = tmp_path / "not-an-image.png"
+    source.write_bytes(b"not really a png")
+    with pytest.raises(SoloStackAssetError):
+        register_asset(
+            source, tmp_path / "episode", asset_id="fake",
+            product="Tool", asset_type="screenshot",
+        )
