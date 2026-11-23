@@ -2,8 +2,8 @@
 from __future__ import annotations
 
 import hashlib
+import math
 import os
-import re
 from pathlib import Path
 from typing import Callable
 
@@ -17,7 +17,6 @@ from app.utils import utils
 DEFAULT_BASE_URL = "http://127.0.0.1:7862"
 MAX_SCENE_GENERATIONS = 8
 REQUEST_TIMEOUT = (10, 900)
-_SAFE_NAME = re.compile(r"[^a-zA-Z0-9_-]+")
 
 
 class LocalAnimateDiffError(RuntimeError):
@@ -90,14 +89,18 @@ def generate_videos(
     terms = [str(term).strip() for term in (search_terms or []) if str(term).strip()]
     if not terms:
         raise LocalAnimateDiffError("No scene prompts were supplied for AnimateDiff")
-    if len(terms) > MAX_SCENE_GENERATIONS:
-        terms = terms[:MAX_SCENE_GENERATIONS]
     try:
         required_duration = float(audio_duration)
     except (TypeError, ValueError):
         required_duration = 0.0
     if required_duration <= 0:
         raise LocalAnimateDiffError("Narration duration must be positive before video generation")
+    clip_limit = max(1, int(max_clip_duration))
+    requested_scenes = min(
+        MAX_SCENE_GENERATIONS,
+        max(1, math.ceil(required_duration / clip_limit)),
+    )
+    terms = terms[:requested_scenes]
 
     status = health_check(settings)
     if status is None:
@@ -127,7 +130,12 @@ def generate_videos(
         try:
             response = requests.post(
                 f"{base_url(settings)}/generate",
-                json={"prompt": prompt, "aspect": aspect, "seed": int(digest, 16) % (2**32), "steps": 12},
+                json={
+                    "prompt": prompt,
+                    "aspect": aspect,
+                    "seed": int(digest, 16) % (2**32),
+                    "steps": 16,
+                },
                 timeout=REQUEST_TIMEOUT,
                 stream=True,
             )
