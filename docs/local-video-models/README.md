@@ -16,7 +16,7 @@ The initial profile uses FP16 weights, VAE slicing and Accelerate CPU offload. T
 
 ## Model and licensing boundary
 
-The adapter (guoyww/animatediff-motion-adapter-v1-5-2) and base model (stable-diffusion-v1-5/stable-diffusion-v1-5) have separate model licences. The model cards and licence texts must be reviewed for the intended monetized YouTube use before publishing commercial output. The Stable Diffusion safety checker is left enabled. Do not disable it for production.
+The adapter (guoyww/animatediff-motion-adapter-v1-5-2) and base model (stable-diffusion-v1-5/stable-diffusion-v1-5) have separate model licences. The base model metadata identifies CreativeML OpenRAIL-M. The adapter metadata does not expose a clear licence in the inspected model record, so its commercial-use permission is unresolved. Do not use this backend for monetized production until the adapter's authoritative licence is located and reviewed. The Stable Diffusion safety checker is left enabled. Do not disable it for production.
 
 LTX-Video 2B remains a separate candidate; it is not silently installed or selected because its runtime/precision path and model-weight licence have not been validated for this Colab setup.
 
