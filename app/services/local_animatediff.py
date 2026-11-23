@@ -73,7 +73,7 @@ def _persist_sources(task_id: str, records: list[dict]) -> None:
 def generate_videos(
     *,
     task_id: str,
-    search_terms: list[str],
+    search_terms: list[str] | str,
     video_aspect,
     audio_duration: float,
     max_clip_duration: int = 5,
@@ -86,9 +86,15 @@ def generate_videos(
     graphics, narration and final encoding. The local model is only responsible
     for generating scene footage. The service is never replaced by a paid API.
     """
-    terms = [str(term).strip() for term in (search_terms or []) if str(term).strip()]
+    raw_terms = [search_terms] if isinstance(search_terms, str) else (search_terms or [])
+    terms = [str(term).strip() for term in raw_terms if str(term).strip()]
     if not terms:
         raise LocalAnimateDiffError("No scene prompts were supplied for AnimateDiff")
+    if len(terms) > MAX_SCENE_GENERATIONS:
+        raise LocalAnimateDiffError(
+            f"AnimateDiff is limited to {MAX_SCENE_GENERATIONS} scene generations per video; "
+            f"received {len(terms)} prompts"
+        )
     try:
         required_duration = float(audio_duration)
     except (TypeError, ValueError):
