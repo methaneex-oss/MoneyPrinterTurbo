@@ -6185,7 +6185,7 @@ def _render_video_settings(panel, params):
             presenter_enabled = st.checkbox(
                 "Show original Solo Stack presenter on the opening scene",
                 value=bool(config.snapshot_config_with_pending(config.app).get(
-                    "solo_stack_presenter_enabled", False
+                    "solo_stack_presenter_enabled", True
                 )),
                 key="solo_stack_presenter_enabled_checkbox",
                 help="Uses the original locally rendered Stack character; no external model or paid API.",
