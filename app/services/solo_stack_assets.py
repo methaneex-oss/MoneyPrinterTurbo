@@ -6,6 +6,7 @@ import json
 import os
 import re
 import shutil
+import tempfile
 from datetime import date
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -71,9 +72,20 @@ def _load_manifest(project_dir: Path) -> dict:
 def _save_manifest(project_dir: Path, payload: dict) -> None:
     project_dir.mkdir(parents=True, exist_ok=True)
     destination = _manifest_path(project_dir)
-    temporary = destination.with_suffix(".json.tmp")
-    temporary.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    os.replace(temporary, destination)
+    temporary = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w", encoding="utf-8", dir=project_dir,
+            prefix=".solo-stack-manifest-", suffix=".tmp", delete=False,
+        ) as handle:
+            temporary = Path(handle.name)
+            handle.write(json.dumps(payload, ensure_ascii=False, indent=2) + "\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary, destination)
+    finally:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
 
 
 def register_asset(
@@ -174,6 +186,10 @@ def add_evidence(
     if not isinstance(publisher, str) or not publisher.strip() or len(publisher) > 160:
         raise SoloStackAssetError("Publisher is required.")
     source_url = validate_source_url(source_url)
+    if source_url is None:
+        raise SoloStackAssetError("A source URL is required for every evidence claim.")
+    if _CONTROL.search(claim) or _CONTROL.search(publisher):
+        raise SoloStackAssetError("Evidence text contains invalid control characters.")
     try:
         date.fromisoformat(checked_at)
     except (TypeError, ValueError) as exc:
@@ -203,8 +219,10 @@ def verify_asset(project_dir: str | Path, asset_id: str) -> bool:
     record = next((item for item in manifest["assets"] if item.get("asset_id") == asset_id), None)
     if record is None:
         raise SoloStackAssetError("Asset ID was not found.")
+    if not isinstance(record.get("file"), str) or not isinstance(record.get("sha256"), str):
+        raise SoloStackAssetError("Manifest asset record is malformed.")
     relative = Path(record["file"])
-    if relative.is_absolute() or ".." in relative.parts or relative.parts[0] != "assets":
+    if not relative.parts or relative.is_absolute() or ".." in relative.parts or relative.parts[0] != "assets":
         raise SoloStackAssetError("Manifest contains an unsafe asset path.")
     target = (project / relative).resolve()
     if project not in target.parents or not target.is_file():
