@@ -117,10 +117,11 @@ def generate(request: GenerateRequest):
     if not GENERATION_LOCK.acquire(blocking=False):
         raise HTTPException(status_code=429, detail="AnimateDiff is already generating another scene")
 
-    work_dir = Path(tempfile.mkdtemp(prefix="mpt-animatediff-"))
-    raw_path = work_dir / "raw.mp4"
-    final_path = work_dir / "scene.mp4"
+    work_dir = None
     try:
+        work_dir = Path(tempfile.mkdtemp(prefix="mpt-animatediff-"))
+        raw_path = work_dir / "raw.mp4"
+        final_path = work_dir / "scene.mp4"
         from diffusers.utils import export_to_video
 
         generator = torch.Generator(device="cpu").manual_seed(request.seed)
@@ -169,10 +170,12 @@ def generate(request: GenerateRequest):
             background=BackgroundTask(shutil.rmtree, work_dir, ignore_errors=True),
         )
     except subprocess.TimeoutExpired as exc:
-        shutil.rmtree(work_dir, ignore_errors=True)
+        if work_dir is not None:
+            shutil.rmtree(work_dir, ignore_errors=True)
         raise HTTPException(status_code=504, detail="Video interpolation timed out") from exc
     except Exception as exc:
-        shutil.rmtree(work_dir, ignore_errors=True)
+        if work_dir is not None:
+            shutil.rmtree(work_dir, ignore_errors=True)
         raise HTTPException(
             status_code=500,
             detail=f"AnimateDiff generation failed: {type(exc).__name__}: {exc}",
