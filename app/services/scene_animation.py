@@ -11,7 +11,7 @@ from __future__ import annotations
 import re
 
 import numpy as np
-from moviepy import ColorClip, CompositeVideoClip, ImageClip, vfx
+from moviepy import ColorClip, CompositeVideoClip, ImageClip, VideoClip, vfx
 from PIL import Image, ImageDraw, ImageFont
 
 
@@ -98,6 +98,44 @@ def scene_label_x(
     )
     eased = progress * progress * (3.0 - 2.0 * progress)
     return int(round(target_x * (1.0 - eased)))
+
+
+def scene_progress_width(time_seconds: float, duration: float, track_width: int) -> int:
+    """Return the eased width of the animated scene progress indicator."""
+    if duration <= 0 or track_width <= 0:
+        return 0
+    progress = max(0.0, min(1.0, time_seconds / duration))
+    eased = progress * progress * (3.0 - 2.0 * progress)
+    return int(round(track_width * eased))
+
+
+def build_scene_progress_frame(
+    time_seconds: float,
+    duration: float,
+    card_size: tuple[int, int],
+    accent: tuple[int, int, int, int] = (70, 211, 231, 255),
+) -> np.ndarray:
+    """Render a transparent progress rail using the scene's accent color."""
+    width, height = card_size
+    frame = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(frame)
+    left = min(34, max(8, width // 12))
+    right = max(left + 1, width - left)
+    track_width = right - left
+    y = height - 13
+    draw.rounded_rectangle(
+        (left, y, right, y + 3),
+        radius=2,
+        fill=(255, 255, 255, 54),
+    )
+    filled = scene_progress_width(time_seconds, duration, track_width)
+    if filled:
+        draw.rounded_rectangle(
+            (left, y, min(right, left + filled), y + 3),
+            radius=2,
+            fill=accent,
+        )
+    return np.asarray(frame)
 
 
 def _font(font_path: str | None, size: int):
@@ -188,6 +226,22 @@ def add_scene_label(
     overlay = ImageClip(np.asarray(card)).with_duration(duration).with_position(
         lambda t: (card_x(t), target_y)
     )
+    accent = _SCENE_ACCENTS[infer_scene_type(label)]
+    def progress_frame(time_seconds):
+        return build_scene_progress_frame(
+            time_seconds, duration, (card_width, card_height), accent
+        )
+
+    progress_overlay = VideoClip(
+        lambda t: progress_frame(t)[:, :, :3],
+        duration=duration,
+    ).with_mask(
+        VideoClip(
+            lambda t: progress_frame(t)[:, :, 3].astype(np.float32) / 255.0,
+            is_mask=True,
+            duration=duration,
+        )
+    ).with_position(lambda t: (card_x(t), target_y))
     # Fade the alpha mask, not the RGB image; fading RGB to black leaves an
     # opaque dark rectangle at both clip boundaries.
     if overlay.mask is not None:
@@ -198,7 +252,6 @@ def add_scene_label(
         )
     # A short accent stroke sweeps across the card as it settles. This adds
     # a second motion layer without rendering a full-frame animation per frame.
-    accent = _SCENE_ACCENTS[infer_scene_type(label)]
     stroke_width = min(64, max(32, card_width // 10))
     stroke_duration = min(0.8, duration)
     stroke = ColorClip(size=(stroke_width, 4), color=accent[:3]).with_duration(
@@ -216,6 +269,6 @@ def add_scene_label(
         )
     )
     return CompositeVideoClip(
-        [clip, overlay, stroke],
+        [clip, overlay, progress_overlay, stroke],
         size=(width, height),
     ).with_duration(float(clip.duration))
