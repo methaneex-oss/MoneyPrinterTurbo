@@ -284,3 +284,8 @@ def test_infistar_video_does_not_accept_separate_llm_key():
         {"infistar_api_key": "llm-only-key"}, GROUPS
     )
     assert "infistar" not in result["ai_video"]
+
+
+def test_local_animatediff_is_always_listed_without_credentials_or_network(monkeypatch):
+    result = settings_providers.configured_material_providers({}, GROUPS)
+    assert "animatediff" in result["ai_video"]
