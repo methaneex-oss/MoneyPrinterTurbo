@@ -49,6 +49,7 @@ from app.services import bgm as bgm_service
 from app.services import material_upload as material_upload_service
 from app.services import (
     cache_manager,
+    local_animatediff,
     llm,
     loomloom,
     material,
@@ -146,6 +147,7 @@ VIDEO_SOURCE_GROUPS = {
         "wavespeed",
         "muapi",
         "useapi",
+        "animatediff",
     ),
     "ai_image": ("openai_image", "codex_image", "useapi_image"),
     "local": ("local",),
@@ -6133,6 +6135,7 @@ def _render_video_settings(panel, params):
                 "metaso_minimax": tr("Metaso MiniMax H3"),
                 "muapi": tr("MuAPI AI Video"),
                 "useapi": tr("useapi.net AI Video"),
+                "animatediff": tr("Local AnimateDiff (Free GPU)"),
                 "loomloom": tr("Shengsuan Cloud AI Video"),
                 "openai_image": tr("OpenAI Compatible Text-to-Image"),
                 "codex_image": tr("codex.image.label"),
@@ -6187,6 +6190,21 @@ def _render_video_settings(panel, params):
                 st.caption(tr("Metaso MiniMax H3 Help"))
             if params.video_source == "muapi":
                 st.caption(tr("MuAPI AI Video Help"))
+            if params.video_source == "animatediff":
+                animatediff_status = local_animatediff.health_check()
+                if animatediff_status:
+                    hardware = animatediff_status.get("hardware", {})
+                    st.caption(
+                        "Local AnimateDiff · "
+                        f"{hardware.get('device', 'CUDA GPU')} · "
+                        f"{hardware.get('vram_gib', '?')} GiB VRAM · "
+                        "open weights, no paid inference API"
+                    )
+                else:
+                    st.warning(
+                        "Local AnimateDiff is not ready. Start the Colab GPU setup cell "
+                        "and wait for model warm-up before generating."
+                    )
             if params.video_source == "useapi":
                 st.caption(tr("useapi.net AI Video Help"))
             if params.video_source == "useapi_image":
@@ -9300,6 +9318,7 @@ def _render_generation_controls(
             "openai_image",
             "codex_image",
             "useapi_image",
+            "animatediff",
             "local",
         ]:
             _remove_active_generation_task(task_id)
