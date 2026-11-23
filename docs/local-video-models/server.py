@@ -68,6 +68,7 @@ def load_pipeline():
         steps_offset=1,
     )
     pipeline.vae.enable_slicing()
+    pipeline.enable_attention_slicing("max")
     pipeline.enable_model_cpu_offload()
     return pipeline, {
         "device": props.name,
