@@ -151,6 +151,7 @@ MATERIAL_VALUES = {
     "codex_image": {"codex_image_model_name": "image-model"},
     "useapi_image": {"useapi_api_token": "synthetic-key"},
     "animatediff": {"animatediff_base_url": "http://127.0.0.1:7862"},
+    "animatediff": {"animatediff_base_url": "http://127.0.0.1:7862"},
 }
 
 
