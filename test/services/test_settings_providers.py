@@ -149,6 +149,8 @@ MATERIAL_VALUES = {
     },
     "codex_image": {"codex_image_model_name": "image-model"},
     "useapi_image": {"useapi_api_token": "synthetic-key"},
+    "animatediff": {"animatediff_base_url": "http://127.0.0.1:7862"},
+    "animatediff": {"animatediff_base_url": "http://127.0.0.1:7862"},
 }
 
 
@@ -281,3 +283,12 @@ def test_infistar_video_does_not_accept_separate_llm_key():
         {"infistar_api_key": "llm-only-key"}, GROUPS
     )
     assert "infistar" not in result["ai_video"]
+
+
+
+def test_animatediff_readiness_requires_notebook_configured_loopback_endpoint():
+    groups = {"ai_video": ("animatediff",)}
+    assert settings_providers.configured_material_providers({}, groups)["ai_video"] == ()
+    assert settings_providers.configured_material_providers(
+        {"animatediff_base_url": "http://127.0.0.1:7862"}, groups
+    )["ai_video"] == ("animatediff",)

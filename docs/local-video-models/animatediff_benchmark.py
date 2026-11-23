@@ -73,8 +73,6 @@ def generate_benchmark(
         base_model_id,
         motion_adapter=adapter,
         torch_dtype=torch.float16,
-        safety_checker=None,
-        requires_safety_checker=False,
     )
     pipe.scheduler = DDIMScheduler.from_pretrained(
         base_model_id,

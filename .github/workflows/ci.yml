@@ -7,6 +7,7 @@ on:
     branches:
       - main
       - feat/scene-composition-engine
+      - feat/free-ai-video-colab-setup-20261122
 
 jobs:
   tests:
@@ -53,11 +54,11 @@ jobs:
         run: uv sync --frozen --python ${{ matrix.python-version }}
 
       - name: Compile Python sources
-        run: uv run --no-sync python -m compileall app cli.py main.py webui test docs/skill
+        run: uv run --no-sync python -m compileall app cli.py main.py webui test docs/skill docs/local-video-models
 
       - name: Lint Python sources
         if: matrix.python-version == '3.11'
-        run: uv run --no-sync ruff check app cli.py main.py webui test docs/skill
+        run: uv run --no-sync ruff check app cli.py main.py webui test docs/skill docs/local-video-models
 
       - name: Run unit tests with coverage
         # pytest 兼容现有 unittest.TestCase，同时会收集仓库中的 pytest 风格
@@ -111,7 +112,7 @@ jobs:
         run: uv sync --frozen --python 3.11
 
       - name: Compile Python sources
-        run: uv run --no-sync python -m compileall app cli.py main.py webui test docs/skill
+        run: uv run --no-sync python -m compileall app cli.py main.py webui test docs/skill docs/local-video-models
 
       - name: Run core service smoke tests
         run: >-

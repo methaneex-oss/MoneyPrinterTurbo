@@ -1,27 +1,26 @@
-# Local AI video model experiments
+# Local AI video generation
 
-These experiments run open model weights on a local CUDA GPU. They do not call paid inference APIs and are not enabled as a production MoneyPrinterTurbo provider.
+The AnimateDiff backend runs locally on a CUDA GPU attached to Google Colab. It does not call paid inference APIs. The production path is exposed in MoneyPrinterTurbo as **Local AnimateDiff (Free GPU)** only after the local service is ready.
 
-## AnimateDiff SD 1.5 benchmark
+## Architecture
 
-The initial benchmark uses the Diffusers AnimateDiff motion adapter with an SD 1.5 base model. It generates one 16-frame, 512x512 MP4 at 8 FPS. The model uses FP16 weights, VAE slicing, and Accelerate CPU offload to reduce peak VRAM pressure.
+- The local server loads the AnimateDiff motion adapter and Stable Diffusion 1.5 base model once, keeps the pipeline in memory, and exposes a loopback-only HTTP API on 127.0.0.1:7862.
+- The MoneyPrinterTurbo client calls that service, validates MP4 responses, writes clips into the task directory, and records scene source metadata.
+- The task orchestrator routes the animatediff video source through the local generator. The existing compositor still handles scene ordering, duration trimming/reuse, subtitles, narration, music, graphics and final encoding.
+- The WebUI shows the source and local service status. If the service is unavailable, the task fails with a clear local-service error; it never switches to a paid provider.
+- The Colab notebook checks GPU, VRAM, system RAM and disk before installing the isolated environment. Hugging Face weights are cached on Google Drive. The server is not exposed through the ngrok tunnel.
+- The notebook stops the local image model only after video-GPU preflight succeeds. If AnimateDiff startup fails, it restarts and warms the local image model; if that recovery fails, it returns to the configured Pixabay source. No paid fallback is used.
 
-Run only in a separate environment. Do not install these dependencies into MoneyPrinterTurbo's main locked environment.
+## Runtime profile
 
-On Colab, the runtime must already have a CUDA-compatible PyTorch installation. Then:
+The initial profile uses FP16 weights, VAE slicing and Accelerate CPU offload. The server requires at least 12 GiB of GPU VRAM, generates 16 frames at 384x672 portrait / 672x384 landscape / 512x512 square, then slows the clip 1.5x and interpolates to 24 FPS. This profile is a conservative experiment gate, not a guarantee that every Colab GPU or free runtime allocation will complete inference.
 
-```bash
-python -m pip install -r docs/local-video-models/requirements.txt
-python docs/local-video-models/animatediff_benchmark.py \
-  --output /content/animatediff-benchmark.mp4
-```
+## Model and licensing boundary
 
-The script performs an 8 GiB VRAM preflight before downloading model weights. This is a conservative experiment gate, **not a guarantee** that inference will succeed; available system RAM, GPU architecture, model download access, and Colab allocation also matter. A failed preflight or inference does not switch to a paid service.
+The adapter (guoyww/animatediff-motion-adapter-v1-5-2) and base model (stable-diffusion-v1-5/stable-diffusion-v1-5) have separate model licences. The base model metadata identifies CreativeML OpenRAIL-M. The adapter metadata does not expose a clear licence in the inspected model record, so its commercial-use permission is unresolved. Do not use this backend for monetized production until the adapter's authoritative licence is located and reviewed. The Stable Diffusion safety checker is left enabled. Do not disable it for production.
 
-The benchmark reports GPU name, compute capability, VRAM, model IDs, frame count, resolution, steps, and output size. Inspect the resulting MP4 for motion coherence, flicker, artifacts, and prompt adherence before considering production use.
+LTX-Video 2B remains a separate candidate; it is not silently installed or selected because its runtime/precision path and model-weight licence have not been validated for this Colab setup.
 
-## Licensing and production gate
+## Validation boundary
 
-The AnimateDiff adapter and SD 1.5 base-model weights have separate licences. Review both for the intended commercial YouTube use before enabling monetized production. This experimental script is not connected to the WebUI or task pipeline; no AI-video capability should be advertised until a generated MP4 has passed a real task integration test.
-
-For the model comparison and the LTX-Video 2B alternative, see [free-ai-video-model-fit.md](../free-ai-video-model-fit.md).
+Automated tests cover the source routing, HTTP response handling, manifest persistence, Colab preflight/setup syntax, and provider visibility. They do not prove model inference, visual quality, or successful end-to-end rendering on a live Colab GPU. Those require the GPU runtime to be attached and a real MP4 to be generated and inspected.

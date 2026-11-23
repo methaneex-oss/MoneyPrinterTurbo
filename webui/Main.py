@@ -49,6 +49,7 @@ from app.services import bgm as bgm_service
 from app.services import material_upload as material_upload_service
 from app.services import (
     cache_manager,
+    local_animatediff,
     llm,
     loomloom,
     material,
@@ -146,6 +147,7 @@ VIDEO_SOURCE_GROUPS = {
         "wavespeed",
         "muapi",
         "useapi",
+        "animatediff",
     ),
     "ai_image": ("openai_image", "codex_image", "useapi_image"),
     "local": ("local",),
@@ -3455,6 +3457,7 @@ def _material_provider_labels():
         "wavespeed": tr("WaveSpeed AI Video"),
         "muapi": tr("MuAPI AI Video"),
         "useapi": tr("useapi.net AI Video"),
+        "animatediff": tr("Local AnimateDiff (Free GPU)"),
         "openai_image": tr("OpenAI Compatible Text-to-Image"),
         "codex_image": tr("codex.image.label"),
         "useapi_image": tr("useapi.net Nano Banana Images"),
@@ -3645,7 +3648,25 @@ def _save_settings_api_keys(config_key, widget_key):
 
 def _render_material_provider_settings(provider):
     app_settings = config.snapshot_config_with_pending(config.app)
-    if provider in VIDEO_SOURCE_GROUPS["stock_video"]:
+    if provider == "animatediff":
+        st.markdown("**Local AnimateDiff (Free GPU)**")
+        st.caption(
+            "Uses the local Colab CUDA runtime and open model weights. "
+            "No API key, hosted inference endpoint, or paid fallback is used."
+        )
+        status = local_animatediff.health_check()
+        if status:
+            hardware = status.get("hardware", {})
+            st.success(
+                f"Ready · {hardware.get('device', 'CUDA GPU')} · "
+                f"{hardware.get('vram_gib', '?')} GiB VRAM"
+            )
+        else:
+            st.warning(
+                "Not running. Start the AnimateDiff setup cell in the Colab notebook "
+                "and wait for the model warm-up to finish."
+            )
+    elif provider in VIDEO_SOURCE_GROUPS["stock_video"]:
         labels = {
             "pexels": "Pexels API Key",
             "pixabay": "Pixabay API Key",
@@ -6133,6 +6154,7 @@ def _render_video_settings(panel, params):
                 "metaso_minimax": tr("Metaso MiniMax H3"),
                 "muapi": tr("MuAPI AI Video"),
                 "useapi": tr("useapi.net AI Video"),
+                "animatediff": tr("Local AnimateDiff (Free GPU)"),
                 "loomloom": tr("Shengsuan Cloud AI Video"),
                 "openai_image": tr("OpenAI Compatible Text-to-Image"),
                 "codex_image": tr("codex.image.label"),
@@ -6187,6 +6209,21 @@ def _render_video_settings(panel, params):
                 st.caption(tr("Metaso MiniMax H3 Help"))
             if params.video_source == "muapi":
                 st.caption(tr("MuAPI AI Video Help"))
+            if params.video_source == "animatediff":
+                animatediff_status = local_animatediff.health_check()
+                if animatediff_status:
+                    hardware = animatediff_status.get("hardware", {})
+                    st.caption(
+                        "Local AnimateDiff · "
+                        f"{hardware.get('device', 'CUDA GPU')} · "
+                        f"{hardware.get('vram_gib', '?')} GiB VRAM · "
+                        "open weights, no paid inference API"
+                    )
+                else:
+                    st.warning(
+                        "Local AnimateDiff is not ready. Start the Colab GPU setup cell "
+                        "and wait for model warm-up before generating."
+                    )
             if params.video_source == "useapi":
                 st.caption(tr("useapi.net AI Video Help"))
             if params.video_source == "useapi_image":
@@ -9300,6 +9337,7 @@ def _render_generation_controls(
             "openai_image",
             "codex_image",
             "useapi_image",
+            "animatediff",
             "local",
         ]:
             _remove_active_generation_task(task_id)

@@ -26,6 +26,7 @@ from app.services import (
     generation_progress,
     infistar_video,
     jalapeno_video,
+    local_animatediff,
     llm,
     loomloom,
     material,
@@ -107,7 +108,7 @@ _VIDEO_MUSIC_PROVIDERS = {
 _SUPPORTED_VIDEO_SOURCES = frozenset({
     "pexels", "pixabay", "coverr", "local", "wavespeed",
     "volcengine_seedance", "ofox", "metaso_minimax", "muapi", "useapi",
-    "loomloom", "openai_image", "codex_image", "useapi_image", "infistar",
+    "loomloom", "openai_image", "codex_image", "useapi_image", "infistar", "animatediff",
     "jalapeno",
 })
 
@@ -742,6 +743,20 @@ def get_video_materials(
     jalapeno_video_endpoint: volcengine_seedance.SeedanceEndpoint | None = None,
     codex_image_context: codex_image.CodexImageContext | None = None,
 ):
+    if params.video_source == "animatediff":
+        logger.info("\n\n## generating local AnimateDiff scene footage")
+        try:
+            return local_animatediff.generate_videos(
+                task_id=task_id,
+                search_terms=video_terms,
+                video_aspect=params.video_aspect,
+                audio_duration=audio_duration,
+                max_clip_duration=params.video_clip_duration,
+                progress_callback=_stage_progress_reporter(task_id, 40, 50),
+            )
+        except local_animatediff.LocalAnimateDiffError as exc:
+            _mark_task_failed(task_id, "materials", str(exc))
+            return None
     if params.video_source == "local":
         logger.info("\n\n## preprocess local materials")
         materials = video.preprocess_video(
