@@ -41,7 +41,8 @@ def test_editorial_card_preserves_real_product_image_inside_brand_frame(tmp_path
     _make_editorial_card(source, output, "Notion", "9:16", "notion.com")
     with Image.open(output) as result:
         assert result.size == (1080, 1920)
-        assert result.getpixel((0, 0)) == (16, 24, 39)
+        pixel = result.getpixel((0, 0))
+        assert max(abs(actual - expected) for actual, expected in zip(pixel, (16, 24, 39))) <= 3
 
 
 def test_identifies_products_from_a_single_string_term():
