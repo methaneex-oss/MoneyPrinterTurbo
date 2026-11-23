@@ -994,6 +994,7 @@ def combine_videos(
     source_groups: dict[str, str] | None = None,
     scene_labels: dict[str, str] | None = None,
     solo_stack_presenter_enabled: bool = False,
+    presenter_direction: dict | None = None,
     used_video_paths: List[str] | None = None,
     progress_callback: Callable[[float], None] | None = None,
 ) -> str:
@@ -1179,7 +1180,9 @@ def combine_videos(
             # The recurring Solo Stack host appears on the opening shot only;
             # later scenes remain focused on genuine product footage and graphics.
             if solo_stack_presenter_enabled and index == 0:
-                clip = solo_stack_presenter.add_presenter_overlay(clip, expression="talk")
+                clip = solo_stack_presenter.add_presenter_overlay(
+                    clip, expression="talk", acting_direction=presenter_direction
+                )
 
             shuffle_side = random.choice(["left", "right", "top", "bottom"])
             # Short footage and faster playback can leave less than one second.
