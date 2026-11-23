@@ -142,3 +142,68 @@ The current vector-primitive presenter is a prototype and does not yet satisfy
 this visual acceptance bar. The Kokoro adapter is present in the repository,
 but a working self-hosted Colab endpoint, selected voice audition, and measured
 render have not been verified by this specification.
+
+
+## 7. Performance variation — identity is fixed, acting is not
+
+The character model and voice identity are the continuity anchors. The
+performance must be authored per episode and per scene. "Consistent character"
+does not mean repeating the same animation, camera angle, emotional register,
+scene order, or outfit in every upload.
+
+### Invariants
+- Preserve Stack's recognisable face, silhouette, proportions, core palette,
+  emblem, and personality.
+- Preserve the selected voice, speaker identity, and broad vocal timbre.
+- Preserve the channel's evidence-first, candid editorial point of view.
+
+### Episode-driven variables
+The episode planner and scene director choose performance from the script's
+meaning, emotional intent, and visual evidence. They may vary:
+- gaze, head turns, eye direction, blinking, brows, mouth shapes, posture;
+- hand gestures, pointing, shrugging, walking, leaning, reacting, and timing;
+- shot scale, angle, screen position, entrance/exit, staging, and transitions;
+- emotional state (curious, amused, focused, surprised, doubtful, concerned,
+  satisfied) and intensity;
+- clothing, accessories, and hand props when contextually justified.
+
+Clothing changes are occasional and motivated (for example, a relevant prop or
+episode setting), not random costume changes. Keep a stable base wardrobe and
+recognition cues; avoid changing several identity features at once.
+
+### Voice performance versus voice identity
+The speaker/voice ID remains fixed, but delivery is expressive. The script and
+voice renderer may vary rate, emphasis, pitch contour within natural limits,
+pauses, sentence grouping, and energy to fit intent. Do not use pitch-shifting
+or exaggerated effects that make Stack sound like a different speaker. Avoid
+relying on SSML tags unless the selected provider actually supports them; use
+provider-specific capability checks and a safe plain-text fallback.
+
+### Acting direction data
+Each scene should carry structured direction derived from the script, such as
+intent, emotion, intensity, gaze target, gesture family, body movement, shot
+framing, wardrobe/prop overrides, and narration delivery. These are semantic
+scene directions, not a finite list of canned sequences. The director maps
+them to supported animation controls, selecting or composing varied motion.
+It must be possible for the same emotion to produce different natural actions
+in different scenes.
+
+Do not randomize blindly. Variation must be reproducible from the episode
+plan, relevant to meaning, and reviewable. Use deterministic seeds only for
+incidental micro-variation (such as blink timing), never to replace editorial
+direction.
+
+### Explicit anti-patterns
+- Replaying one idle bob/talking loop throughout the episode.
+- Making every video open with the same pose or gesture.
+- Reusing a fixed six-beat scene sequence regardless of subject.
+- Changing Stack's face or voice between videos.
+- Making every line sound equally excited.
+- Changing outfits so often that the character loses instant recognition.
+- Letting character animation cover the real product interface or important
+  evidence.
+
+The renderer should support an expanding action/pose library and composable
+motion primitives rather than a single baked animation. If the scene calls for
+an action not yet supported, use the closest honest staging or add a new
+reusable action; do not silently map every intent to the same gesture.
