@@ -12,7 +12,7 @@ The AnimateDiff backend runs locally on a CUDA GPU attached to Google Colab. It 
 
 ## Runtime profile
 
-The initial profile uses FP16 weights, VAE slicing and Accelerate CPU offload. The server requires at least 12 GiB of GPU VRAM, generates 16 frames at 512x768 portrait / 768x512 landscape / 512x512 square, then slows the clip 1.5x and interpolates to 24 FPS. This profile is a conservative experiment gate, not a guarantee that every Colab GPU or free runtime allocation will complete inference.
+The initial profile uses FP16 weights, VAE slicing and Accelerate CPU offload. The server requires at least 12 GiB of GPU VRAM, generates 16 frames at 384x672 portrait / 672x384 landscape / 512x512 square, then slows the clip 1.5x and interpolates to 24 FPS. This profile is a conservative experiment gate, not a guarantee that every Colab GPU or free runtime allocation will complete inference.
 
 ## Model and licensing boundary
 
