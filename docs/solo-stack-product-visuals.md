@@ -19,6 +19,20 @@ Supported official sources currently include:
 - Cursor — https://www.cursor.com/features
 - ClickUp — https://clickup.com/features/ai
 - Figma — https://www.figma.com/product/
+- Gemini — https://gemini.google.com/
+- Google Workspace — https://workspace.google.com/
+- Microsoft 365 — https://www.microsoft.com/microsoft-365
+- Asana — https://asana.com/product/ai
+- Trello — https://trello.com/
+- Airtable — https://www.airtable.com/platform
+- Slack — https://slack.com/features/ai
+- Make — https://www.make.com/en
+- n8n — https://n8n.io/
+- Loom — https://www.loom.com/
+- Descript — https://www.descript.com/
+- Calendly — https://calendly.com/features
+- HubSpot — https://www.hubspot.com/products/ai
+- GitHub Copilot — https://github.com/features/copilot
 
 The product catalogue is deliberately allowlisted. It does not search arbitrary
 image sites, download random screenshots, or generate fake application UIs.
