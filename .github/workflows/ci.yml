@@ -8,6 +8,7 @@ on:
       - main
       - feat/scene-composition-engine
       - feat/free-ai-video-colab-setup-20261122
+      - feat/free-ai-video-colab-setup-20261122
 
 jobs:
   tests:
@@ -54,7 +55,7 @@ jobs:
         run: uv sync --frozen --python ${{ matrix.python-version }}
 
       - name: Compile Python sources
-        run: uv run --no-sync python -m compileall app cli.py main.py webui test docs/skill docs/local-video-models
+        run: uv run --no-sync python -m compileall app cli.py main.py webui test docs/skill docs/local-video-models docs/local-video-models
 
       - name: Lint Python sources
         if: matrix.python-version == '3.11'
