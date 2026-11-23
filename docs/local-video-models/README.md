@@ -9,6 +9,7 @@ The AnimateDiff backend runs locally on a CUDA GPU attached to Google Colab. It 
 - The task orchestrator routes the animatediff video source through the local generator. The existing compositor still handles scene ordering, duration trimming/reuse, subtitles, narration, music, graphics and final encoding.
 - The WebUI shows the source and local service status. If the service is unavailable, the task fails with a clear local-service error; it never switches to a paid provider.
 - The Colab notebook checks GPU, VRAM, system RAM and disk before installing the isolated environment. Hugging Face weights are cached on Google Drive. The server is not exposed through the ngrok tunnel.
+- The notebook stops the local image model only after video-GPU preflight succeeds. If AnimateDiff startup fails, it restarts and warms the local image model; if that recovery fails, it returns to the configured Pixabay source. No paid fallback is used.
 
 ## Runtime profile
 
