@@ -9,7 +9,7 @@ import shutil
 import tempfile
 from datetime import date
 from pathlib import Path
-from urllib.parse import urlsplit
+from urllib.parse import urlsplit, urlunsplit
 
 MAX_ASSET_BYTES = 100 * 1024 * 1024
 _ALLOWED = {".png", ".jpg", ".jpeg", ".webp", ".mp4", ".mov", ".webm"}
