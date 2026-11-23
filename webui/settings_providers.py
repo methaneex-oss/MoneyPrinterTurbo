@@ -12,7 +12,6 @@ from app.models.llm_provider import LLM_PROVIDER_REGISTRY
 from app.services import (
     infistar_video,
     jalapeno_video,
-    local_animatediff,
     loomloom,
     material,
     metaso_minimax,
