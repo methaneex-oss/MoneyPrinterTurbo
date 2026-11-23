@@ -115,3 +115,50 @@ def test_task_routes_animatediff_source_to_local_backend(monkeypatch):
     assert calls["task_id"] == "synthetic-task"
     assert calls["search_terms"] == ["scene one"]
     assert calls["audio_duration"] == 12.0
+
+
+def test_generate_videos_treats_a_string_as_one_scene(tmp_path, monkeypatch):
+    monkeypatch.setattr(local_animatediff, "health_check", lambda settings=None: {"status": "ready"})
+    monkeypatch.setattr(local_animatediff.utils, "task_dir", lambda task_id: str(tmp_path))
+    monkeypatch.setattr(
+        local_animatediff.requests,
+        "post",
+        lambda *args, **kwargs: FakeResponse(valid_mp4_bytes()),
+    )
+    monkeypatch.setattr(local_animatediff.task_artifacts, "patch_script_data", lambda *args, **kwargs: True)
+
+    paths = local_animatediff.generate_videos(
+        task_id="single-scene",
+        search_terms="one complete documentary scene",
+        video_aspect="portrait",
+        audio_duration=12,
+    )
+
+    assert len(paths) == 1
+    assert Path(paths[0]).is_file()
+
+
+def test_generate_videos_rejects_more_than_the_scene_limit_before_network(monkeypatch):
+    monkeypatch.setattr(
+        local_animatediff,
+        "health_check",
+        lambda settings=None: pytest.fail("health check must not run for invalid scene counts"),
+    )
+    with pytest.raises(local_animatediff.LocalAnimateDiffError, match="limited to"):
+        local_animatediff.generate_videos(
+            task_id="too-many",
+            search_terms=[f"scene {index}" for index in range(9)],
+            video_aspect="portrait",
+            audio_duration=20,
+        )
+
+
+@pytest.mark.parametrize("duration", [0, -1, "invalid", None])
+def test_generate_videos_rejects_invalid_audio_duration(duration):
+    with pytest.raises(local_animatediff.LocalAnimateDiffError, match="duration must be positive"):
+        local_animatediff.generate_videos(
+            task_id="invalid-duration",
+            search_terms=["a documentary scene"],
+            video_aspect="portrait",
+            audio_duration=duration,
+        )
