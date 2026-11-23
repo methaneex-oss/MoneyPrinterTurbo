@@ -750,7 +750,7 @@ def get_video_materials(
                 task_id=task_id,
                 search_terms=video_terms,
                 video_aspect=params.video_aspect,
-                audio_duration=audio_duration * params.video_count,
+                audio_duration=audio_duration,
                 max_clip_duration=params.video_clip_duration,
                 progress_callback=_stage_progress_reporter(task_id, 40, 50),
             )
