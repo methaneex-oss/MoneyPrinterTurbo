@@ -41,3 +41,15 @@ def test_editorial_card_preserves_real_product_image_inside_brand_frame(tmp_path
     with Image.open(output) as result:
         assert result.size == (1080, 1920)
         assert result.getpixel((0, 0)) == (16, 24, 39)
+
+
+def test_identifies_products_from_a_single_string_term():
+    assert identify_products("", "", "Use Claude to review this proposal") == ["Claude"]
+
+
+def test_image_extension_rejects_svg_and_non_image_content_types():
+    from app.services.solo_stack_product_media import _safe_image_extension
+
+    assert _safe_image_extension("https://cdn.example.com/app.webp", "image/webp") == ".webp"
+    assert _safe_image_extension("https://cdn.example.com/app", "image/jpeg; charset=binary") == ".jpg"
+    assert _safe_image_extension("https://cdn.example.com/logo.svg", "image/svg+xml") is None
