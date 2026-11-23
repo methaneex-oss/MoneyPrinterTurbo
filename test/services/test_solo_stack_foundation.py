@@ -36,7 +36,7 @@ def test_asset_registration_copies_and_hash_verifies(tmp_path):
     )
     assert record["file"] == "assets/chatgpt-home.png"
     assert verify_asset(project, "chatgpt-home")
-    assert source.read_bytes() == b"genuine screenshot bytes"
+    assert (project / "assets" / "chatgpt-home.png").read_bytes() == source.read_bytes()
 
 
 def test_asset_registration_rejects_symlink_and_oversized_file(tmp_path):
@@ -95,3 +95,15 @@ def test_asset_registration_rejects_fake_image_bytes(tmp_path):
             source, tmp_path / "episode", asset_id="fake",
             product="Tool", asset_type="screenshot",
         )
+
+
+def test_presenter_overlay_composes_with_existing_video_clip():
+    from moviepy import ColorClip
+    from app.services.solo_stack_presenter import add_presenter_overlay
+
+    clip = ColorClip(size=(640, 360), color=(24, 32, 48), duration=1.0)
+    result = add_presenter_overlay(clip)
+    assert result.size == (640, 360)
+    assert result.duration == 1.0
+    assert result.get_frame(0.5).shape == (360, 640, 3)
+    result.close()
