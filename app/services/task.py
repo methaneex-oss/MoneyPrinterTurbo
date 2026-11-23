@@ -37,6 +37,7 @@ from app.services import (
     subtitle,
     scene_planner,
     solo_stack_director,
+    solo_stack_product_media,
     task_artifacts,
     twelvelabs,
     useapi,
@@ -2091,6 +2092,40 @@ def _run_pipeline(
         **({"jalapeno_video_endpoint": jalapeno_video_endpoint}
            if jalapeno_video_endpoint is not None else {}),
     )
+    # Solo Stack supplements stock footage with real public product visuals
+    # from official vendor pages when the episode explicitly names a supported app.
+    # This is a no-cost capture path; any browser/network failure leaves the
+    # existing media workflow intact.
+    if bool(config.app.get("solo_stack_mode", False)):
+        try:
+            product_visual_clips = solo_stack_product_media.prepare_episode_product_visuals(
+                task_id=task_id,
+                subject=params.video_subject,
+                script=video_script,
+                terms=video_terms,
+                aspect=str(params.video_aspect),
+                duration=max(3.0, min(6.0, float(params.video_clip_duration or 4))),
+                max_products=2,
+            )
+            if product_visual_clips:
+                existing_paths = list(downloaded_videos or [])
+                insertion = min(1, len(existing_paths))
+                downloaded_videos = (
+                    existing_paths[:insertion]
+                    + product_visual_clips
+                    + existing_paths[insertion:]
+                )
+                logger.info(
+                    "added %s official Solo Stack product visual clips",
+                    len(product_visual_clips),
+                )
+        except Exception as exc:
+            logger.warning(
+                "official Solo Stack product visual capture skipped; "
+                "continuing with existing media: %s",
+                exc,
+            )
+
     if not downloaded_videos:
         return _mark_task_failed(
             task_id,
