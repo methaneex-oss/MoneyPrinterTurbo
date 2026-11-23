@@ -7,6 +7,7 @@ on:
     branches:
       - main
       - feat/scene-composition-engine
+      - feat/free-ai-video-colab-setup-20261122
 
 jobs:
   tests:
