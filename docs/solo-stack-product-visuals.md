@@ -59,8 +59,7 @@ environment. No paid API is used. On each Solo Stack video task, only products
 named by the episode are considered, up to the configured product limit. Capture
 failures are non-fatal: existing stock/local media remains available.
 
-The official product visuals are inserted in narration order, and Solo Stack
-uses sequential composition to avoid random selection dropping the evidence clips.
+The official product visuals are deterministically distributed through the existing episode timeline in product-mention order, and Solo Stack uses sequential composition to avoid random selection dropping or reordering the evidence clips.
 
 ## Verification
 
