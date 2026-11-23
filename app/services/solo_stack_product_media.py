@@ -72,6 +72,76 @@ PRODUCTS = {
         "url": "https://www.figma.com/product/",
         "domain": "figma.com",
     },
+    "Gemini": {
+        "aliases": ("gemini", "google gemini"),
+        "url": "https://gemini.google.com/",
+        "domain": "gemini.google.com",
+    },
+    "Google Workspace": {
+        "aliases": ("google workspace", "workspace by google"),
+        "url": "https://workspace.google.com/",
+        "domain": "workspace.google.com",
+    },
+    "Microsoft 365": {
+        "aliases": ("microsoft 365", "office 365"),
+        "url": "https://www.microsoft.com/microsoft-365",
+        "domain": "microsoft.com",
+    },
+    "Asana": {
+        "aliases": ("asana",),
+        "url": "https://asana.com/product/ai",
+        "domain": "asana.com",
+    },
+    "Trello": {
+        "aliases": ("trello",),
+        "url": "https://trello.com/",
+        "domain": "trello.com",
+    },
+    "Airtable": {
+        "aliases": ("airtable",),
+        "url": "https://www.airtable.com/platform",
+        "domain": "airtable.com",
+    },
+    "Slack": {
+        "aliases": ("slack",),
+        "url": "https://slack.com/features/ai",
+        "domain": "slack.com",
+    },
+    "Make": {
+        "aliases": ("make.com", "make automation"),
+        "url": "https://www.make.com/en",
+        "domain": "make.com",
+    },
+    "n8n": {
+        "aliases": ("n8n",),
+        "url": "https://n8n.io/",
+        "domain": "n8n.io",
+    },
+    "Loom": {
+        "aliases": ("loom",),
+        "url": "https://www.loom.com/",
+        "domain": "loom.com",
+    },
+    "Descript": {
+        "aliases": ("descript",),
+        "url": "https://www.descript.com/",
+        "domain": "descript.com",
+    },
+    "Calendly": {
+        "aliases": ("calendly",),
+        "url": "https://calendly.com/features",
+        "domain": "calendly.com",
+    },
+    "HubSpot": {
+        "aliases": ("hubspot",),
+        "url": "https://www.hubspot.com/products/ai",
+        "domain": "hubspot.com",
+    },
+    "GitHub Copilot": {
+        "aliases": ("github copilot", "copilot for github"),
+        "url": "https://github.com/features/copilot",
+        "domain": "github.com",
+    },
 }
 _IMAGE_HINTS = re.compile(
     r"(app|interface|screen|editor|dashboard|chat|design|document|workflow|product|feature)",
