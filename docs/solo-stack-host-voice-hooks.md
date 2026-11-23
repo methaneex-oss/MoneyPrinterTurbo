@@ -66,8 +66,9 @@ Delivery rules:
 ### Free-first TTS direction
 
 The repository already has a Kokoro-compatible TTS adapter and config section.
-Use a self-hosted Kokoro-82M server as the first no-paid-API candidate, with a
-fixed selected voice and a small voice audition before production. The model is
+Use a self-hosted Kokoro-82M server as the first no-paid-API candidate. The
+Colab setup auditions `am_michael` and pins that voice ID only after the service
+and speech endpoint respond successfully. The model is
 listed under Apache-2.0 and is lightweight relative to large speech models;
 actual speed and quality must still be measured in the target Colab runtime.
 Keep the current working TTS providers as explicit fallbacks. Do not silently
@@ -207,3 +208,44 @@ The renderer should support an expanding action/pose library and composable
 motion primitives rather than a single baked animation. If the scene calls for
 an action not yet supported, use the closest honest staging or add a new
 reusable action; do not silently map every intent to the same gesture.
+
+
+## 8. Implemented production wiring (2026-11-24)
+
+The episode-aware acting director is now implemented in
+`app/services/solo_stack_director.py`. It evaluates the actual opening
+narration and subject, chooses a semantic emotional intent, gesture family,
+gaze, intensity, and occasional context-motivated wardrobe, and returns a
+reproducible scene-direction object. It does not replay a fixed gesture sequence
+or change Stack's identity.
+
+The Pillow character renderer now supports separate action, expression, gaze,
+wardrobe, and intensity controls. The task pipeline supplies the director's
+result to the opening-scene compositor. The renderer remains local and does not
+require a paid image API. The opening host remains limited to the opening shot
+so real product footage stays legible and central.
+
+When Solo Stack mode is enabled, script generation adds channel-specific
+requirements: the first spoken sentence must be a truthful, subject-specific
+question; the narration must address real freelancer/small-business decisions;
+and it must avoid invented results, prices, limits, sources, or personal
+experience. The script planner still generates the actual hook from each
+episode's subject rather than selecting from a canned hook list.
+
+The Colab notebook now includes an isolated CPU Kokoro-FastAPI setup, a voice
+catalog check, and a short speech audition. It pins the Kokoro provider and
+voice only if the configured server returns the requested voice and the speech
+endpoint successfully produces audio. If startup or synthesis fails, existing
+voice settings are preserved. This path is free/open-source software and uses
+no paid speech API. The first Colab run still needs to complete the download,
+startup, and audio audition in the user's actual runtime before the voice is
+considered runtime-verified.
+
+### Remaining acceptance boundary
+
+The renderer is a procedural 2D rig, not a full professional hand-drawn
+character animation package. It offers varied pose/expression/wardrobe
+directions but does not yet provide skeletal limb interpolation, lip-sync
+visemes, frame-by-frame acting authored by an animator, or AI-generated motion.
+A complete episode must still be rendered and visually/audio reviewed in Colab
+before accepting character appeal, voice quality, or production readiness.

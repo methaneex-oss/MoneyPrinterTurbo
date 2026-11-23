@@ -2,6 +2,7 @@ import json
 from pathlib import Path
 
 import pytest
+from PIL import Image
 
 from app.services.solo_stack_assets import (
     SoloStackAssetError, add_evidence, register_asset, validate_source_url, verify_asset,
@@ -107,3 +108,12 @@ def test_presenter_overlay_composes_with_existing_video_clip():
     assert result.duration == 1.0
     assert result.get_frame(0.5).shape == (360, 640, 3)
     result.close()
+
+
+
+def test_presenter_supports_episode_specific_actions_and_wardrobes():
+    base = build_presenter_frame(0.8, expression="curious", action="question")
+    reaction = build_presenter_frame(0.8, expression="surprised", action="react")
+    smart = build_presenter_frame(0.8, expression="skeptical", action="lean", wardrobe="smart")
+    assert base.size == reaction.size == smart.size
+    assert len({base.tobytes(), reaction.tobytes(), smart.tobytes()}) == 3

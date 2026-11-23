@@ -36,6 +36,7 @@ from app.services import (
     sonilo,
     subtitle,
     scene_planner,
+    solo_stack_director,
     task_artifacts,
     twelvelabs,
     useapi,
@@ -372,11 +373,29 @@ def generate_script(task_id, params):
     logger.info("\n\n## generating video script")
     video_script = params.video_script.strip()
     if not video_script:
+        script_requirements = params.video_script_prompt or ""
+        if bool(config.app.get("solo_stack_mode", False)):
+            channel_requirements = (
+                "SOLO STACK CHANNEL REQUIREMENTS: Write for freelancers and small "
+                "business owners evaluating AI tools for real work. Open with one "
+                "specific, topic-dependent question in the first spoken sentence. "
+                "Make the question concrete and truthful; do not use a reusable "
+                "generic hook, invent test results, prices, limits, sources, or "
+                "personal experience. Explain the actual task, show meaningful "
+                "trade-offs, and end with a decisive evidence-aware verdict. "
+                "Use natural conversational English with occasional dry humour, "
+                "not forced jokes or a repeated catchphrase. Narration only."
+            )
+            # The channel contract takes priority while retaining a bounded
+            # amount of the operator's own prompt within llm.MAX_SCRIPT_PROMPT_LENGTH.
+            script_requirements = channel_requirements + (
+                "\n\n" + script_requirements[:1100] if script_requirements.strip() else ""
+            )
         video_script = llm.generate_script(
             video_subject=params.video_subject,
             language=params.video_language,
             paragraph_number=params.paragraph_number,
-            video_script_prompt=params.video_script_prompt,
+            video_script_prompt=script_requirements,
             custom_system_prompt=params.custom_system_prompt,
         )
     else:
@@ -1168,6 +1187,10 @@ def generate_final_videos(
             video_concat_mode=video_concat_mode,
             video_transition_mode=video_transition_mode,
             solo_stack_presenter_enabled=bool(config.app.get("solo_stack_presenter_enabled", True)),
+            presenter_direction=(
+                solo_stack_director.plan_performance(video_script, params.video_subject)
+                if bool(config.app.get("solo_stack_mode", False)) else None
+            ),
             max_clip_duration=params.video_clip_duration,
             threads=params.n_threads,
             clip_speed=params.video_clip_speed,
