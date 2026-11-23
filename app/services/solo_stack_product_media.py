@@ -292,10 +292,10 @@ def prepare_episode_product_visuals(
                         page.screenshot(path=str(screenshot), full_page=False)
                         images = [(screenshot, source_page)]
     
+                    product_slug = re.sub(r"[^a-z0-9]+", "-", product.casefold()).strip("-")
                     for image_index, (source_image, image_url) in enumerate(images, start=1):
                         card = product_dir / f"visual-card-{image_index}.jpg"
-                        product_slug = re.sub(r"[^a-z0-9]+", "-", product.casefold()).strip("-")
-                    clip = product_dir / f"{product_slug}-product-visual-{image_index}.mp4"
+                        clip = product_dir / f"{product_slug}-product-visual-{image_index}.mp4"
                         _make_editorial_card(source_image, card, product, aspect, spec["domain"])
                         _render_still_clip(card, clip, duration, aspect)
                         digest = hashlib.sha256(source_image.read_bytes()).hexdigest()
