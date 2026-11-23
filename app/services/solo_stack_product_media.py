@@ -123,6 +123,7 @@ def _download_page_images(page, destination: Path) -> list[tuple[Path, str]]:
         if item["src"].startswith("https://")
         and item["width"] >= 320 and item["height"] >= 160
         and _safe_image_extension(item["src"], "image/png") is not None
+        and (_IMAGE_HINTS.search(item["alt"]) or _IMAGE_HINTS.search(urlparse(item["src"]).path))
     ]
     candidates.sort(
         key=lambda item: (
