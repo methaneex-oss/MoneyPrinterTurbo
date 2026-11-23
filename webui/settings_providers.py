@@ -104,7 +104,7 @@ def configured_material_providers(settings, groups, codex_connected=False):
             "muapi": muapi.is_enabled(settings),
             "useapi": useapi.is_enabled(settings),
             "useapi_image": useapi.is_enabled(settings),
-            "animatediff": True,
+            "animatediff": bool(_text(settings.get("animatediff_base_url"))),
             "openai_image": material.is_openai_image_enabled(settings),
             "codex_image": bool(
                 codex_connected and _text(settings.get("codex_image_model_name"))
