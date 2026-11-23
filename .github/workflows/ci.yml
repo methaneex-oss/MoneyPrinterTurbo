@@ -8,6 +8,7 @@ on:
       - main
       - feat/scene-composition-engine
       - feat/free-ai-video-colab-setup-20261122
+      - feat/solo-stack-presenter-research-20261123
 
 jobs:
   tests:
