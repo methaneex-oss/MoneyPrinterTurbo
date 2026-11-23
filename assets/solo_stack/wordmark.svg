@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 220" role="img" aria-labelledby="title desc">
+<title id="title">Solo Stack</title><desc id="desc">Solo Stack wordmark, an independent technology review brand.</desc>
+<rect width="640" height="220" rx="28" fill="#101827"/>
+<g transform="translate(32 28)">
+<rect x="0" y="0" width="164" height="164" rx="32" fill="#17243A" stroke="#46D3E7" stroke-width="4"/>
+<path d="M38 54h88M38 80h88M38 106h88" stroke="#46D3E7" stroke-width="12" stroke-linecap="round"/>
+<path d="M38 132h54" stroke="#FF8963" stroke-width="12" stroke-linecap="round"/>
+</g>
+<text x="226" y="112" font-family="Arial,sans-serif" font-size="66" font-weight="700" fill="#F6F4EE">SOLO</text>
+<text x="226" y="178" font-family="Arial,sans-serif" font-size="66" font-weight="700" fill="#46D3E7">STACK</text>
+</svg>
