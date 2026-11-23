@@ -1167,6 +1167,7 @@ def generate_final_videos(
             video_fit_mode=params.video_fit_mode,
             video_concat_mode=video_concat_mode,
             video_transition_mode=video_transition_mode,
+            solo_stack_presenter_enabled=bool(config.app.get("solo_stack_presenter_enabled", False)),
             max_clip_duration=params.video_clip_duration,
             threads=params.n_threads,
             clip_speed=params.video_clip_speed,
