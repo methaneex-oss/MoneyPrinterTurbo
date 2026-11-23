@@ -2117,14 +2117,12 @@ def _run_pipeline(
                     + existing_paths[insertion:]
                 )
                 logger.info(
-                    "added %s official Solo Stack product visual clips",
-                    len(product_visual_clips),
+                    "added {} official Solo Stack product visual clips".format(len(product_visual_clips)),
                 )
         except Exception as exc:
             logger.warning(
                 "official Solo Stack product visual capture skipped; "
-                "continuing with existing media: %s",
-                exc,
+                "continuing with existing media: {}".format(exc),
             )
 
     if not downloaded_videos:
