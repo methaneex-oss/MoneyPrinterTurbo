@@ -88,3 +88,30 @@ def test_generate_videos_rejects_non_mp4_response(tmp_path, monkeypatch):
             audio_duration=5,
         )
     assert not list(tmp_path.glob("*.part"))
+
+def test_task_routes_animatediff_source_to_local_backend(monkeypatch):
+    from app.models.schema import VideoParams
+    from app.services import task
+
+    calls = {}
+    expected = ["clip-one.mp4"]
+
+    def fake_generate_videos(**kwargs):
+        calls.update(kwargs)
+        return expected
+
+    monkeypatch.setattr(task.local_animatediff, "generate_videos", fake_generate_videos)
+    monkeypatch.setattr(task, "_stage_progress_reporter", lambda *args: None)
+    params = VideoParams(video_subject="documentary subject", video_source="animatediff")
+
+    result = task.get_video_materials(
+        task_id="synthetic-task",
+        params=params,
+        video_terms=["scene one"],
+        audio_duration=12.0,
+    )
+
+    assert result == expected
+    assert calls["task_id"] == "synthetic-task"
+    assert calls["search_terms"] == ["scene one"]
+    assert calls["audio_duration"] == 12.0
