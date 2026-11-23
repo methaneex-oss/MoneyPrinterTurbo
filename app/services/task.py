@@ -1147,7 +1147,8 @@ def generate_final_videos(
         and bgm_service.should_use_bgm(params.bgm_type, params.bgm_volume)
     )
     # Matching preserves keyword order; batch allocation varies each keyword's candidates.
-    if params.match_materials_to_script:
+    if params.match_materials_to_script or bool(config.app.get("solo_stack_mode", False)):
+        # Solo Stack app demonstrations must remain in the episode's narrative order.
         video_concat_mode = VideoConcatMode.sequential
     elif params.video_count == 1:
         video_concat_mode = params.video_concat_mode
@@ -2103,7 +2104,7 @@ def _run_pipeline(
                 subject=params.video_subject,
                 script=video_script,
                 terms=video_terms,
-                aspect=str(params.video_aspect),
+                aspect=getattr(params.video_aspect, "value", params.video_aspect),
                 duration=max(3.0, min(6.0, float(params.video_clip_duration or 4))),
                 max_products=2,
             )
