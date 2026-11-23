@@ -123,6 +123,7 @@ def generate_videos(
         digest = hashlib.sha256(f"{task_id}:{index}:{term}".encode("utf-8")).hexdigest()[:10]
         target = task_directory / f"animatediff-scene-{index:02d}-{digest}.mp4"
         temporary = target.with_suffix(".mp4.part")
+        response = None
         try:
             response = requests.post(
                 f"{base_url(settings)}/generate",
@@ -147,6 +148,9 @@ def generate_videos(
             raise LocalAnimateDiffError(
                 f"AnimateDiff scene {index}/{total} failed for '{term[:80]}': {exc}"
             ) from exc
+        finally:
+            if response is not None:
+                response.close()
         video_paths.append(str(target))
         records.append(
             {
