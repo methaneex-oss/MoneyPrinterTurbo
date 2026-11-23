@@ -80,4 +80,5 @@ def test_colab_animatediff_setup_is_syntax_valid_and_isolated():
     assert "server.py" in video_cell
     assert "model-cache/huggingface" in video_cell
     assert "set_video_source('animatediff')" in video_cell
+    assert "restore_local_image_source" in video_cell
     assert "No paid fallback" in video_cell
