@@ -167,6 +167,23 @@ def identify_products(subject: str, script: str, terms=None, limit: int = 3) -> 
     return [name for _, name in sorted(matches)[:max(0, min(5, limit))]]
 
 
+def interleave_product_visuals(existing_clips: list[str], product_clips: list[str]) -> list[str]:
+    """Distribute product evidence clips through the existing episode timeline."""
+    existing = list(existing_clips or [])
+    visuals = list(product_clips or [])
+    if not visuals:
+        return existing
+    result = []
+    cursor = 0
+    for index, clip in enumerate(visuals):
+        position = int((index + 1) * len(existing) / (len(visuals) + 1))
+        result.extend(existing[cursor:position])
+        result.append(clip)
+        cursor = position
+    result.extend(existing[cursor:])
+    return result
+
+
 def _safe_image_extension(url: str, content_type: str) -> str | None:
     suffix = Path(urlparse(url).path).suffix.lower()
     if suffix in {".jpg", ".jpeg", ".png", ".webp"}:
