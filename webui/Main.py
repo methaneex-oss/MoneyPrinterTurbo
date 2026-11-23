@@ -3457,6 +3457,7 @@ def _material_provider_labels():
         "wavespeed": tr("WaveSpeed AI Video"),
         "muapi": tr("MuAPI AI Video"),
         "useapi": tr("useapi.net AI Video"),
+        "animatediff": tr("Local AnimateDiff (Free GPU)"),
         "openai_image": tr("OpenAI Compatible Text-to-Image"),
         "codex_image": tr("codex.image.label"),
         "useapi_image": tr("useapi.net Nano Banana Images"),
