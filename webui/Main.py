@@ -3647,7 +3647,25 @@ def _save_settings_api_keys(config_key, widget_key):
 
 def _render_material_provider_settings(provider):
     app_settings = config.snapshot_config_with_pending(config.app)
-    if provider in VIDEO_SOURCE_GROUPS["stock_video"]:
+    if provider == "animatediff":
+        st.markdown("**Local AnimateDiff (Free GPU)**")
+        st.caption(
+            "Uses the local Colab CUDA runtime and open model weights. "
+            "No API key, hosted inference endpoint, or paid fallback is used."
+        )
+        status = local_animatediff.health_check()
+        if status:
+            hardware = status.get("hardware", {})
+            st.success(
+                f"Ready · {hardware.get('device', 'CUDA GPU')} · "
+                f"{hardware.get('vram_gib', '?')} GiB VRAM"
+            )
+        else:
+            st.warning(
+                "Not running. Start the AnimateDiff setup cell in the Colab notebook "
+                "and wait for the model warm-up to finish."
+            )
+    elif provider in VIDEO_SOURCE_GROUPS["stock_video"]:
         labels = {
             "pexels": "Pexels API Key",
             "pixabay": "Pixabay API Key",
