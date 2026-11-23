@@ -9,6 +9,7 @@ on:
       - feat/scene-composition-engine
       - feat/free-ai-video-colab-setup-20261122
       - feat/solo-stack-presenter-research-20261123
+      - feat/solo-stack-episode-acting-voice-20261124
 
 jobs:
   tests:
