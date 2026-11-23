@@ -75,8 +75,9 @@ def test_colab_animatediff_setup_is_syntax_valid_and_isolated():
     assert "--system-site-packages" in video_cell
     assert "docs/local-video-models/requirements.txt" in video_cell
     assert "torch.cuda.is_available()" in video_cell
-    assert "vram_gib < 8" in video_cell
-    assert "free_disk_gib < 12" in video_cell
-    assert "paid fallback" in video_cell
+    assert "vram_gib < 12" in video_cell
+    assert "free_disk_gib < 16" in video_cell
+    assert "server.py" in video_cell
     assert "model-cache/huggingface" in video_cell
-    assert "animatediff-benchmark.mp4" in video_cell
+    assert "set_video_source('animatediff')" in video_cell
+    assert "no paid fallback" in video_cell
