@@ -124,7 +124,7 @@ def register_asset(
         with source.open("rb") as media:
             header = media.read(16)
         is_mp4 = suffix in {".mp4", ".mov"} and len(header) >= 8 and header[4:8] == b"ftyp"
-        is_webm = suffix == ".webm" and header.startswith(b"\\x1a\\x45\\xdf\\xa3")
+        is_webm = suffix == ".webm" and header.startswith(bytes.fromhex("1a45dfa3"))
         if not (is_mp4 or is_webm):
             raise SoloStackAssetError("Video asset does not have a valid MP4/MOV or WebM container header.")
     if captured_at:
