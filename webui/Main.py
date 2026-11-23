@@ -47,6 +47,7 @@ from app.models.schema import (
 )
 from app.services import bgm as bgm_service
 from app.services import material_upload as material_upload_service
+from app.services import solo_stack_assets
 from app.services import (
     cache_manager,
     local_animatediff,
@@ -6180,6 +6181,96 @@ def _render_video_settings(panel, params):
                 on_settings=_open_material_settings_dialog,
             )
             _set_runtime_config("app", "video_source", params.video_source)
+
+            presenter_enabled = st.checkbox(
+                "Show original Solo Stack presenter on the opening scene",
+                value=bool(config.snapshot_config_with_pending(config.app).get(
+                    "solo_stack_presenter_enabled", True
+                )),
+                key="solo_stack_presenter_enabled_checkbox",
+                help="Uses the original locally rendered Stack character; no external model or paid API.",
+            )
+            _set_runtime_config("app", "solo_stack_presenter_enabled", presenter_enabled)
+
+            with st.expander("Solo Stack · real app screenshots and demo footage"):
+                st.caption(
+                    "Upload genuine product screenshots or screen recordings. "
+                    "Generated illustrations are not accepted as real product evidence."
+                )
+                capture_product = st.text_input(
+                    "Product name", key="solo_stack_capture_product"
+                )
+                capture_type = st.selectbox(
+                    "Asset type",
+                    ["screenshot", "screen_recording", "demo_media", "logo"],
+                    key="solo_stack_capture_type",
+                )
+                capture_source = st.text_input(
+                    "Official source page (optional)", key="solo_stack_capture_source"
+                )
+                capture_file = st.file_uploader(
+                    "Upload genuine app capture",
+                    type=["png", "jpg", "jpeg", "webp", "mp4", "mov", "webm"],
+                    key="solo_stack_capture_file",
+                    max_upload_size=100,
+                )
+                if st.button("Save app capture to Solo Stack library", key="solo_stack_save_capture"):
+                    if not capture_product.strip() or capture_file is None:
+                        st.error("Enter a product name and select a genuine capture.")
+                    else:
+                        suffix = Path(capture_file.name).suffix.lower()
+                        asset_id = f"{re.sub(r'[^a-z0-9]+', '-', Path(capture_file.name).stem.lower()).strip('-')[:48] or 'capture'}-{uuid4().hex[:8]}"
+                        temporary_path = None
+                        try:
+                            with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as temporary:
+                                temporary.write(capture_file.getbuffer())
+                                temporary_path = temporary.name
+                            record = solo_stack_assets.register_asset(
+                                temporary_path,
+                                utils.storage_dir("solo_stack"),
+                                asset_id=asset_id,
+                                product=capture_product.strip(),
+                                asset_type=capture_type,
+                                source_url=capture_source.strip() or None,
+                                captured_at=datetime.now().date().isoformat(),
+                                notes="Captured or supplied by the channel operator.",
+                            )
+                            st.success(f"Saved {record['file']} · SHA-256 verified on registration.")
+                        except (solo_stack_assets.SoloStackAssetError, OSError) as exc:
+                            st.error(f"Capture was not saved: {exc}")
+                        finally:
+                            if temporary_path:
+                                Path(temporary_path).unlink(missing_ok=True)
+
+                st.divider()
+                st.caption("Evidence ledger · record current prices, plan limits and feature claims with their sources.")
+                with st.form("solo_stack_evidence_form"):
+                    evidence_product = st.text_input("Evidence product")
+                    evidence_claim_id = st.text_input("Claim ID (letters, digits, dots, _ or -)")
+                    evidence_claim = st.text_area("Claim to verify")
+                    evidence_source = st.text_input("Source URL")
+                    evidence_publisher = st.text_input("Publisher")
+                    evidence_plan = st.text_input("Plan (optional)")
+                    evidence_value = st.text_input("Observed price or limit (optional)")
+                    evidence_currency = st.text_input("Currency (optional)")
+                    evidence_submitted = st.form_submit_button("Save sourced evidence")
+                if evidence_submitted:
+                    try:
+                        record = solo_stack_assets.add_evidence(
+                            utils.storage_dir("solo_stack"),
+                            claim_id=evidence_claim_id.strip(),
+                            product=evidence_product.strip(),
+                            claim=evidence_claim.strip(),
+                            source_url=evidence_source.strip(),
+                            publisher=evidence_publisher.strip(),
+                            checked_at=datetime.now().date().isoformat(),
+                            value=evidence_value.strip() or None,
+                            currency=evidence_currency.strip() or None,
+                            plan=evidence_plan.strip() or None,
+                        )
+                        st.success(f"Evidence recorded: {record['claim_id']}")
+                    except (solo_stack_assets.SoloStackAssetError, OSError) as exc:
+                        st.error(f"Evidence was not saved: {exc}")
 
             loomloom_video_capability = None
             if params.video_source == "loomloom":

@@ -43,7 +43,7 @@ from app.models.schema import (
     VideoTransitionMode,
 )
 from app.services import bgm as bgm_service
-from app.services import scene_animation, scene_graphics
+from app.services import scene_animation, scene_graphics, solo_stack_presenter
 from app.services.utils import subtitle_shaping, video_effects
 from app.utils import file_security, logging_utils, utils
 from app.utils.subtitle_reader import moviepy_subtitles
@@ -993,6 +993,7 @@ def combine_videos(
     source_usage: dict[str, int] | None = None,
     source_groups: dict[str, str] | None = None,
     scene_labels: dict[str, str] | None = None,
+    solo_stack_presenter_enabled: bool = False,
     used_video_paths: List[str] | None = None,
     progress_callback: Callable[[float], None] | None = None,
 ) -> str:
@@ -1174,6 +1175,11 @@ def combine_videos(
                 # entrance motion. The panel is local and uses only the matched
                 # narration heading; no generated facts or external assets.
                 clip = scene_graphics.add_scene_graphic(clip, scene_label)
+
+            # The recurring Solo Stack host appears on the opening shot only;
+            # later scenes remain focused on genuine product footage and graphics.
+            if solo_stack_presenter_enabled and index == 0:
+                clip = solo_stack_presenter.add_presenter_overlay(clip, expression="talk")
 
             shuffle_side = random.choice(["left", "right", "top", "bottom"])
             # Short footage and faster playback can leave less than one second.
