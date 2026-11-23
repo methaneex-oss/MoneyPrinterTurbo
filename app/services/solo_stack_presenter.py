@@ -104,7 +104,7 @@ def build_presenter_frame(
 def add_presenter_overlay(clip, *, expression: str = "talk", corner: str = "right"):
     """Add the branded presenter to a clip using low-cost local frame rendering."""
     import numpy as np
-    from moviepy import ImageClip, VideoClip
+    from moviepy import CompositeVideoClip, VideoClip
 
     width, height = (int(value) for value in clip.size)
     if width < 360 or height < 360 or float(clip.duration or 0) < 0.6:
@@ -117,6 +117,4 @@ def add_presenter_overlay(clip, *, expression: str = "talk", corner: str = "righ
     def frame(t):
         return np.asarray(build_presenter_frame(t, (target_w, target_h), expression).convert("RGB"))
     overlay = VideoClip(frame, duration=duration).with_position((x, y))
-    return clip.with_effects([]) if False else __import__(
-        "moviepy"
-    ).CompositeVideoClip([clip, overlay], size=(width, height)).with_duration(float(clip.duration))
+    return CompositeVideoClip([clip, overlay], size=(width, height)).with_duration(float(clip.duration))
