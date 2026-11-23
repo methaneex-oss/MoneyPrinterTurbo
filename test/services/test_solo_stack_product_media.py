@@ -1,0 +1,43 @@
+from pathlib import Path
+
+from PIL import Image
+
+from app.services.solo_stack_product_media import (
+    PRODUCTS,
+    _make_editorial_card,
+    identify_products,
+)
+
+
+def test_identifies_named_products_in_episode_mention_order():
+    products = identify_products(
+        "Canva vs ChatGPT for a freelancer",
+        "We will test ChatGPT first, then compare it with Canva.",
+        ["Canva AI", "ChatGPT writing"],
+        limit=3,
+    )
+    assert products == ["Canva", "ChatGPT"]
+
+
+def test_does_not_add_unmentioned_products_or_guess_from_generic_ai_terms():
+    assert identify_products(
+        "Best AI tools for freelancers",
+        "We test a proposal workflow and compare the output.",
+    ) == []
+
+
+def test_product_catalog_uses_official_https_domains():
+    for name, item in PRODUCTS.items():
+        assert item["url"].startswith("https://")
+        assert item["domain"] in item["url"]
+        assert item["aliases"]
+
+
+def test_editorial_card_preserves_real_product_image_inside_brand_frame(tmp_path):
+    source = tmp_path / "official-ui.png"
+    Image.new("RGB", (1280, 720), "#ffffff").save(source)
+    output = tmp_path / "card.jpg"
+    _make_editorial_card(source, output, "Notion", "9:16", "notion.com")
+    with Image.open(output) as result:
+        assert result.size == (1080, 1920)
+        assert result.getpixel((0, 0)) == (16, 24, 39)
