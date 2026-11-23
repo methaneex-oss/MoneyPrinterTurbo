@@ -143,9 +143,11 @@ def generate(request: GenerateRequest):
         export_to_video(frames, str(raw_path), fps=8)
         # 1.5x slow motion plus optical interpolation gives the short 16-frame
         # generation a more usable 3-second, 24-fps editorial clip.
+        import imageio_ffmpeg
+
         subprocess.run(
             [
-                "ffmpeg", "-hide_banner", "-loglevel", "error", "-y",
+                imageio_ffmpeg.get_ffmpeg_exe(), "-hide_banner", "-loglevel", "error", "-y",
                 "-i", str(raw_path),
                 "-vf",
                 "setpts=1.5*PTS,minterpolate=fps=24:mi_mode=mci:mc_mode=aobmc:me_mode=bidir",
