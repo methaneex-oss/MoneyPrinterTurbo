@@ -2109,12 +2109,9 @@ def _run_pipeline(
                 max_products=2,
             )
             if product_visual_clips:
-                existing_paths = list(downloaded_videos or [])
-                insertion = min(1, len(existing_paths))
-                downloaded_videos = (
-                    existing_paths[:insertion]
-                    + product_visual_clips
-                    + existing_paths[insertion:]
+                downloaded_videos = solo_stack_product_media.interleave_product_visuals(
+                    downloaded_videos or [],
+                    product_visual_clips,
                 )
                 logger.info(
                     "added {} official Solo Stack product visual clips".format(len(product_visual_clips)),
