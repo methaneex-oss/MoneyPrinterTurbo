@@ -284,6 +284,14 @@ def test_identifies_unlisted_business_apps_from_comparison_title():
     ) == ["Wave", "Zoho Invoice"]
 
 
+def test_extracts_products_from_a_category_prefixed_comparison_title():
+    assert identify_products(
+        "Best CRM tools: HubSpot vs Zoho CRM for small businesses",
+        "HubSpot and Zoho CRM are the products in this comparison.",
+        limit=2,
+    ) == ["HubSpot", "Zoho CRM"]
+
+
 def test_identifies_unlisted_apps_from_category_episode_script():
     assert identify_products(
         "Best invoicing software for freelancers",
