@@ -192,6 +192,9 @@ def _clean_product_label(value: str) -> str:
         r"^(?:compare|comparing|review|reviewing|versus|vs\.?|between)\s+",
         "", str(value or "").strip(), flags=re.I,
     )
+    for marker in (":", " — ", " – ", " such as ", " like "):
+        if marker in value:
+            value = value.rsplit(marker, 1)[-1]
     value = re.split(
         r"\s+(?:for|among|between|in|with|when|as)\s+",
         value, maxsplit=1, flags=re.I,
