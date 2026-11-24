@@ -17,6 +17,13 @@ composition pipeline.
   unless they explicitly enable it.
 - Character source is original artwork in this repository; do not substitute
   copyrighted TV/movie/game characters or imitate a specific character design.
+- Scene direction changes expression, action, gaze and occasional wardrobe from
+  the actual scene label and narration. Presenter placement now samples several
+  frames from the rendered scene and scores safe upper/middle regions by visual
+  complexity; it chooses a low-obstruction position instead of alternating
+  fixed left/right corners. The lower subtitle band is excluded. This is a
+  lightweight composition heuristic, not semantic object detection, so final
+  video review is still required.
 
 ## Phase 2 — real app assets and evidence ledger
 The new `app.services.solo_stack_assets` service:
@@ -156,6 +163,15 @@ Search is bounded to three script-derived scenes per episode; Pixabay responses
 are cached for 24 hours and downloads are restricted to the provider's image
 hosts. Search failure degrades to the existing stock-footage path rather than
 silently fabricating a product image.
+
+The official-source catalogue also includes Claude Code's public product page
+and the official ggml-org/llama.cpp GitHub project page. The latter is labelled
+as a project-page capture, not as a live llama.cpp terminal session. These
+entries extend the catalogue for common developer-tool comparisons; they do
+not turn the catalogue into universal product recognition. Unknown products
+can still receive topic-relevant supporting imagery, but authentic app-specific
+evidence requires an official source that can be safely verified or a real
+operator capture.
 The Colab Solo Stack preset enables this feature through
 `app.solo_stack_dynamic_visuals_enabled`; it remains off by default in other
 installations unless explicitly enabled in `config.toml`.
