@@ -1542,11 +1542,23 @@ def _openai_image_prompt(search_term: str) -> str:
     """
     template = str(config.app.get("openai_image_prompt_template", "") or "").strip()
     if not template or "{term}" not in template:
-        return search_term
-    try:
-        return template.replace("{term}", search_term)
-    except Exception:
-        return search_term
+        prompt = search_term
+    else:
+        try:
+            prompt = template.replace("{term}", search_term)
+        except Exception:
+            prompt = search_term
+
+    if bool(config.app.get("solo_stack_mode", False)):
+        prompt = (
+            f"{prompt}. Editorial B-roll only. Do not create product interfaces, "
+            "app dashboards, website screenshots, UI mockups, logos, wordmarks, "
+            "brand names, readable text, or fake product screens. If the topic "
+            "mentions a named app, depict only the generic human/workflow context; "
+            "authentic product visuals are supplied separately from verified "
+            "operator captures or official product pages."
+        )
+    return prompt
 
 
 def _response_json_safely(response: Any) -> Any:
