@@ -484,10 +484,12 @@ def add_presenter_overlay(
         # Fade the host in and out so the character never pops over evidence
         # or disappears on a hard cut. The animation timeline itself remains
         # episode-relative and deterministic.
-        fade_in = min(1.0, max(0.0, float(t) / fade_duration))
-        fade_out = min(
-            1.0, max(0.0, (duration - float(t)) / fade_duration)
-        )
+        def smoothstep(value):
+            value = min(1.0, max(0.0, value))
+            return value * value * (3.0 - 2.0 * value)
+
+        fade_in = smoothstep(float(t) / fade_duration)
+        fade_out = smoothstep((duration - float(t)) / fade_duration)
         return alpha * min(fade_in, fade_out)
 
     overlay = VideoClip(frame, duration=duration).with_mask(
