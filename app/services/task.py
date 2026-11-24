@@ -2490,6 +2490,16 @@ def _run_pipeline(
         )
         return {"materials": downloaded_videos}
 
+    if bool(config.app.get("solo_stack_mode", False)):
+        product_blockers = _solo_stack_product_visual_blockers(task_id)
+        if product_blockers:
+            return _mark_task_failed(
+                task_id,
+                "materials",
+                "Solo Stack requires authentic visuals for every named supported "
+                "product before narration/rendering: " + ", ".join(product_blockers),
+            )
+
     sm.state.update_task(task_id, state=const.TASK_STATE_PROCESSING, progress=50)
 
     # 仅完整视频生成流程才需要处理视频拼接模式；
