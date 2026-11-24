@@ -444,10 +444,13 @@ def _solo_stack_free_video_error(params) -> str | None:
             "Solo Stack free-only mode requires the OpenAI-compatible image source "
             "to point to the warmed local Colab image server."
         )
-    if source == "animatediff" and bool(
-        config.app.get("allow_unverified_animatediff", False)
-    ):
-        return None
+    if source == "animatediff":
+        if bool(config.app.get("allow_unverified_animatediff", False)):
+            return None
+        return (
+            "Local AnimateDiff remains disabled until its model-weight license "
+            "is reviewed. No external video request was sent."
+        )
     return (
         f"Solo Stack free-only mode blocks video source '{source or '<empty>'}'. "
         "Use Pixabay, local media, or the warmed local image server."
