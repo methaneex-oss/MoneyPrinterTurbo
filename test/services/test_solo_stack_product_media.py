@@ -6,6 +6,7 @@ from PIL import Image
 from app.services.solo_stack_product_media import (
     PRODUCTS,
     _make_editorial_card,
+    _product_visual_coverage,
     _render_video_capture_clip,
     identify_products,
     interleave_product_visuals,
@@ -25,6 +26,25 @@ def test_identifies_named_products_in_episode_mention_order():
         limit=3,
     )
     assert products == ["Canva", "ChatGPT"]
+
+
+def test_logo_only_asset_does_not_satisfy_product_visual_coverage():
+    logo_only = _product_visual_coverage(
+        ["ChatGPT"],
+        [{"product": "ChatGPT", "asset_type": "logo"}],
+    )
+    assert logo_only[0]["status"] == "missing"
+    assert logo_only[0]["visual_count"] == 0
+
+    with_screenshot = _product_visual_coverage(
+        ["ChatGPT"],
+        [
+            {"product": "ChatGPT", "asset_type": "logo"},
+            {"product": "ChatGPT", "asset_type": "screenshot"},
+        ],
+    )
+    assert with_screenshot[0]["status"] == "available"
+    assert with_screenshot[0]["visual_count"] == 1
 
 
 def test_does_not_add_unmentioned_products_or_guess_from_generic_ai_terms():
