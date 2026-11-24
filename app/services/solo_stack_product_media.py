@@ -173,11 +173,27 @@ def identify_products(subject: str, script: str, terms=None, limit: int = 3) -> 
     text = " ".join([subject or "", script or "", *terms]).casefold()
     matches = []
     for name, item in PRODUCTS.items():
-        positions = [text.find(alias.casefold()) for alias in item["aliases"]]
-        positions = [position for position in positions if position >= 0]
-        if positions:
-            matches.append((min(positions), name))
-    return [name for _, name in sorted(matches)[:max(0, min(5, limit))]]
+        occurrences = [
+            (text.find(alias.casefold()), len(alias))
+            for alias in item["aliases"]
+        ]
+        occurrences = [
+            (position, length)
+            for position, length in occurrences
+            if position >= 0
+        ]
+        if occurrences:
+            first_position = min(position for position, _ in occurrences)
+            # Prefer the most specific alias when a product name contains
+            # another product name (for example, Claude Code vs Claude).
+            longest_at_position = max(
+                length for position, length in occurrences
+                if position == first_position
+            )
+            matches.append((first_position, -longest_at_position, name))
+    return [
+        name for _, _, name in sorted(matches)[:max(0, min(5, limit))]
+    ]
 
 
 def interleave_product_visuals(existing_clips: list[str], product_clips: list[str]) -> list[str]:
