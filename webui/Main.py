@@ -3575,11 +3575,15 @@ def _render_general_settings(settings):
         settings["video_source"] = "pixabay"
         _set_runtime_config("app", "video_source", "pixabay")
         available_groups = _available_video_source_groups(settings)
+    free_only = bool(
+        settings.get("solo_stack_free_only", settings.get("solo_stack_mode", False))
+    )
+    if free_only and settings.get("llm_provider") not in {"openrouter", "ollama"}:
+        settings = dict(settings)
+        settings["llm_provider"] = "openrouter"
+        _set_runtime_config("app", "llm_provider", "openrouter")
     configured = _general_provider_readiness(settings)
-    if (
-        bool(settings.get("solo_stack_mode", False))
-        and bool(settings.get("solo_stack_free_only", True))
-    ):
+    if free_only:
         st.caption(
             "Solo Stack free-only policy: Pixabay, user media and a warmed local "
             "image server are available for visuals; paid video/image providers "
@@ -3590,6 +3594,7 @@ def _render_general_settings(settings):
     llm_labels = {
         provider.provider_id: get_llm_provider_label(provider)
         for provider in LLM_PROVIDER_REGISTRY
+        if not free_only or provider.provider_id in {"openrouter", "ollama"}
     }
     st.subheader(tr("General Providers Title"))
     st.caption(tr("General Providers Help"))
