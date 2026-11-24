@@ -200,7 +200,7 @@ def _clean_product_label(value: str) -> str:
         value, maxsplit=1, flags=re.I,
     )[0]
     value = re.sub(
-        r"\s+(?:review|comparison|software|apps?|tools?)$", "",
+        r"\s+(?:review|comparison|software|apps?|tools?|chat|assistant)$", "",
         value, flags=re.I,
     )
     value = value.strip(" \t\r\n:;,.-!?()[]{}'\"")
