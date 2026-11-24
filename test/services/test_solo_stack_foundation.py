@@ -12,7 +12,6 @@ from app.services.solo_stack_assets import (
 from app.services.solo_stack_presenter import BRAND, build_presenter_frame
 from app.services import task
 
-
 def test_presenter_frames_are_deterministic_and_transparent():
     first = build_presenter_frame(0.5, (240, 280), "talk")
     second = build_presenter_frame(0.5, (240, 280), "talk")
@@ -22,12 +21,10 @@ def test_presenter_frames_are_deterministic_and_transparent():
     assert first.getbbox() is not None
     assert BRAND["character"] == "Stack"
 
-
 def test_presenter_expressions_change_visual_output():
     assert build_presenter_frame(1, expression="talk").tobytes() != build_presenter_frame(
         1, expression="surprised"
     ).tobytes()
-
 
 def test_asset_registration_copies_and_hash_verifies(tmp_path):
     source = tmp_path / "capture.png"
@@ -41,7 +38,6 @@ def test_asset_registration_copies_and_hash_verifies(tmp_path):
     assert record["file"] == "assets/chatgpt-home.png"
     assert verify_asset(project, "chatgpt-home")
     assert (project / "assets" / "chatgpt-home.png").read_bytes() == source.read_bytes()
-
 
 def test_asset_registration_rejects_media_type_mismatch(tmp_path):
     image = tmp_path / "capture.png"
@@ -60,7 +56,6 @@ def test_asset_registration_rejects_media_type_mismatch(tmp_path):
             product="ChatGPT", asset_type="screenshot",
         )
 
-
 def test_asset_registration_rejects_symlink_and_oversized_file(tmp_path):
     source = tmp_path / "real.png"
     Image.new("RGB", (2, 2)).save(source)
@@ -71,7 +66,6 @@ def test_asset_registration_rejects_symlink_and_oversized_file(tmp_path):
     with pytest.raises(SoloStackAssetError):
         validate_source_url("file:///etc/passwd")
 
-
 def test_asset_registration_rejects_duplicate_id(tmp_path):
     source = tmp_path / "capture.webp"
     Image.new("RGB", (2, 2)).save(source)
@@ -79,7 +73,6 @@ def test_asset_registration_rejects_duplicate_id(tmp_path):
     register_asset(source, project, asset_id="one", product="Canva", asset_type="screenshot")
     with pytest.raises(SoloStackAssetError):
         register_asset(source, project, asset_id="one", product="Canva", asset_type="screenshot")
-
 
 def test_evidence_requires_source_and_checked_date(tmp_path):
     project = tmp_path / "episode"
@@ -98,7 +91,6 @@ def test_evidence_requires_source_and_checked_date(tmp_path):
             project, claim_id="bad-date", product="Canva", claim="A claim",
             source_url="https://example.com", publisher="Example", checked_at="yesterday",
         )
-
 
 def test_evidence_lookup_is_product_scoped_and_marks_stale_records(tmp_path):
     today = date.today()
@@ -135,7 +127,6 @@ def test_evidence_lookup_is_product_scoped_and_marks_stale_records(tmp_path):
     assert stale["is_current"] is False
     assert current["source_url"] == "https://chatgpt.com/pricing/"
 
-
 def test_manifest_tampering_is_detected(tmp_path):
     source = tmp_path / "capture.jpg"
     Image.new("RGB", (2, 2), (10, 20, 30)).save(source)
@@ -143,7 +134,6 @@ def test_manifest_tampering_is_detected(tmp_path):
     register_asset(source, project, asset_id="one", product="Tool", asset_type="screenshot")
     Image.new("RGB", (2, 2), (40, 50, 60)).save(project / "assets" / "one.jpg")
     assert not verify_asset(project, "one")
-
 
 def test_asset_registration_rejects_fake_image_bytes(tmp_path):
     source = tmp_path / "not-an-image.png"
@@ -153,7 +143,6 @@ def test_asset_registration_rejects_fake_image_bytes(tmp_path):
             source, tmp_path / "episode", asset_id="fake",
             product="Tool", asset_type="screenshot",
         )
-
 
 def test_presenter_overlay_composes_with_existing_video_clip():
     from moviepy import ColorClip
@@ -166,16 +155,12 @@ def test_presenter_overlay_composes_with_existing_video_clip():
     assert result.get_frame(0.5).shape == (360, 640, 3)
     result.close()
 
-
-
 def test_presenter_supports_episode_specific_actions_and_wardrobes():
     base = build_presenter_frame(0.8, expression="curious", action="question")
     reaction = build_presenter_frame(0.8, expression="surprised", action="react")
     smart = build_presenter_frame(0.8, expression="skeptical", action="lean", wardrobe="smart")
     assert base.size == reaction.size == smart.size
     assert len({base.tobytes(), reaction.tobytes(), smart.tobytes()}) == 3
-
-
 
 def test_solo_stack_presenter_requires_channel_mode(monkeypatch):
     monkeypatch.setitem(task.config.app, "solo_stack_mode", False)
