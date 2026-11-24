@@ -134,7 +134,7 @@ def test_presenter_auto_placement_avoids_a_visually_busy_zone():
     pattern = ((xx // 3 + yy // 3) % 2) * 220
     frame[0:210, 210:360, :] = pattern[..., None]
     scores = _overlay_position_scores(frame, (110, 180))
-    right_top = (360 - 110 - max(12, int(360 * 0.035)), max(8, int(640 * 0.04)))
+    right_top = (360 - 110 - max(12, int(360 * 0.035)), max(12, int(640 * 0.045)))
     selected = min(
         scores,
         key=lambda position: (
@@ -156,7 +156,7 @@ def test_presenter_auto_placement_is_deterministic_for_uniform_scenes():
             scores[position], position[1], -position[0]
         ),
     )
-    assert selected == (360 - 110 - max(12, int(360 * 0.035)), max(8, int(640 * 0.04)))
+    assert selected == (360 - 110 - max(12, int(360 * 0.035)), max(12, int(640 * 0.045)))
 
 
 def test_presenter_position_is_selected_from_actual_scene_frames():
