@@ -3570,6 +3570,12 @@ def _render_general_settings(settings):
         for providers in available_groups.values()
         for provider in providers
     }
+    if bool(
+        settings.get("solo_stack_free_only", settings.get("solo_stack_mode", False))
+    ):
+        # Local operator-supplied media is not a remote provider group, but it
+        # remains an allowed source under the free-only production policy.
+        available_sources.add("local")
     if settings.get("video_source") not in available_sources:
         settings = dict(settings)
         settings["video_source"] = "pixabay"
