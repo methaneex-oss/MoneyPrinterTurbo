@@ -39,9 +39,15 @@ The new `app.services.solo_stack_assets` service:
 - Supports official product-page evidence and real user-captured application
   screenshots/recordings. It does not scrape authenticated apps or pretend
   generated mockups are real product screenshots.
-- During Solo Stack task generation, matching, hash-verified captures are selected
-  by product name and prioritized over public product-page visuals; those public
-  visuals fill remaining slots when available.
+- During Solo Stack task generation, product names are identified from the
+  episode comparison title and generated script, including names not present in
+  a hard-coded product catalogue.
+- Official public sites are resolved at runtime through Wikidata's official
+  website property, with a search-result fallback that is checked against the
+  product identity after navigation. Public captures are limited to the
+  discovered HTTPS domain; operator captures remain the highest-priority source.
+- A product with no safely discoverable official source is recorded as missing
+  rather than silently substituted with generic stock footage.
 
 ## Suggested asset capture workflow
 1. Open the actual product website/app and capture the interface or the real task
@@ -80,8 +86,8 @@ an operator's script.
 
 ## Evidence-aware script generation
 
-When a supported product is named in the episode subject, script generation
-loads matching operator-recorded evidence from the persistent ledger. Only
+When a product is named in the episode subject, script generation loads
+matching operator-recorded evidence from the persistent ledger. Only
 records checked within the last 30 days are supplied as prompt context, with
 their claim, plan/value, publisher, checked date and source URL. The prompt
 treats these records as data rather than instructions and prohibits inventing
@@ -132,13 +138,13 @@ paid request. A blocked configuration fails with a reason rather than falling
 back to a paid service.
 
 
-For every supported product identified from the episode subject, script,
-or material search terms, the product-visual pipeline records operator-capture
-and official-page coverage in `script.json` and the task's product-visual
-manifest. A named product with no captured visual blocks narration/rendering;
-generic stock footage is not accepted as a substitute for showing the product.
-Missing, unreadable, or malformed coverage records fail closed when a supported
-product is named. Episodes that name no supported product do not require
+For every product identified from the episode comparison title, script, or
+material search terms, the product-visual pipeline records operator-capture
+and dynamically discovered official-page coverage in `script.json` and the
+task's product-visual manifest. A named product with no captured visual blocks
+narration/rendering; generic stock footage is not accepted as a substitute for
+showing the product. Missing, unreadable, or malformed coverage records fail
+closed when a product is named. Episodes that name no products do not require
 product-specific footage. Official-page captures are labelled as public
 vendor-site visuals, not authenticated in-app recordings.
 
@@ -164,12 +170,12 @@ are cached for 24 hours and downloads are restricted to the provider's image
 hosts. Search failure degrades to the existing stock-footage path rather than
 silently fabricating a product image.
 
-The official-source catalogue also includes Claude Code's public product page
-and the official ggml-org/llama.cpp GitHub project page. The latter is labelled
-as a project-page capture, not as a live llama.cpp terminal session. These
-entries extend the catalogue for common developer-tool comparisons; they do
-not turn the catalogue into universal product recognition. Unknown products
-can still receive topic-relevant supporting imagery, but authentic app-specific
+Official-source discovery is topic-agnostic: Claude Code, invoicing platforms,
+design tools, CRMs, schedulers, automation products and other named software
+are resolved per episode. Specific examples in tests or historical manifests
+are fixtures, not a closed product list. If the resolver cannot establish a
+credible official source, the product remains visibly uncovered and the task
+fails closed rather than inventing an app screenshot.can still receive topic-relevant supporting imagery, but authentic app-specific
 evidence requires an official source that can be safely verified or a real
 operator capture.
 The Colab Solo Stack preset enables this feature through
