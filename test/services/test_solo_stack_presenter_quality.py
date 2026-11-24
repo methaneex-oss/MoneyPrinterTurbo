@@ -110,7 +110,8 @@ def test_presenter_overlay_fades_in_and_out_without_a_hard_pop():
         start = composite.get_frame(0.0)
         middle = composite.get_frame(0.46)
         end = composite.get_frame(0.91)
-        point = (460, 255)
+        # Sample the face area in the upper-right presenter placement.
+        point = (100, 250)
 
         start_delta = np.abs(start[point] - np.asarray(background)).sum()
         middle_delta = np.abs(middle[point] - np.asarray(background)).sum()
