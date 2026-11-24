@@ -264,6 +264,11 @@ def test_identifies_claude_code_and_llama_cpp_as_distinct_official_sources():
         limit=3,
     )
     assert products == ["Claude Code", "llama.cpp"]
+    assert identify_products(
+        "Claude Code vs Claude chat",
+        "Compare Claude Code with the Claude chat assistant.",
+        limit=3,
+    ) == ["Claude Code", "Claude"]
     assert PRODUCTS["Claude Code"]["domain"] == "claude.com"
     assert PRODUCTS["llama.cpp"]["url"] == "https://github.com/ggml-org/llama.cpp"
     assert PRODUCTS["llama.cpp"]["source_label"] == "OFFICIAL PROJECT PAGE"
