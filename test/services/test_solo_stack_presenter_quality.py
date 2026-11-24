@@ -135,7 +135,12 @@ def test_presenter_auto_placement_avoids_a_visually_busy_zone():
     frame[0:210, 210:360, :] = pattern[..., None]
     scores = _overlay_position_scores(frame, (110, 180))
     right_top = (360 - 110 - max(12, int(360 * 0.035)), max(8, int(640 * 0.04)))
-    selected = min(scores, key=lambda position: (scores[position], position[1], -position[0]))
+    selected = min(
+        scores,
+        key=lambda position: (
+            scores[position], position[1], -position[0]
+        ),
+    )
     assert selected != right_top
     assert selected[1] + 180 <= int(640 * 0.66)
 
