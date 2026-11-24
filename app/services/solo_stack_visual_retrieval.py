@@ -14,6 +14,7 @@ import logging
 import re
 import subprocess
 import time
+from uuid import uuid4
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -108,7 +109,7 @@ def _read_cache(path: Path):
 
 def _write_cache(path: Path, items: list[dict]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_suffix(".tmp")
+    temporary = path.with_name(f"{path.name}.{uuid4().hex}.tmp")
     temporary.write_text(
         json.dumps(
             {"cached_at": time.time(), "items": items},
@@ -175,7 +176,10 @@ def _commons_search(query: str, cache_dir: Path) -> list[dict]:
             "iiurlwidth": 1280,
         },
         headers={
-            "User-Agent": "SoloStackVisualResearch/1.0 (educational video production)"
+            "User-Agent": (
+                "SoloStackVisualResearch/1.0 "
+                "(https://github.com/methaneex-oss/MoneyPrinterTurbo)"
+            )
         },
         timeout=(10, 25),
     )
@@ -184,11 +188,17 @@ def _commons_search(query: str, cache_dir: Path) -> list[dict]:
     pages = (payload.get("query") or {}).get("pages") or {}
     items = []
     for page in pages.values() if isinstance(pages, dict) else []:
+        if not isinstance(page, dict):
+            continue
         info_list = page.get("imageinfo") or []
-        if not info_list or not isinstance(info_list[0], dict):
+        if not isinstance(info_list, list) or not info_list:
+            continue
+        if not isinstance(info_list[0], dict):
             continue
         info = info_list[0]
         meta = info.get("extmetadata") or {}
+        if not isinstance(meta, dict):
+            meta = {}
         def meta_value(key):
             value = meta.get(key) or {}
             return re.sub(r"<[^>]+>", "", str(value.get("value") or "")).strip()
@@ -323,8 +333,9 @@ def _render_motion_clip(
             "ffmpeg", "-y", "-loglevel", "error", "-loop", "1", "-framerate", str(fps),
             "-i", str(image_path),
             "-vf", (
-                f"scale={width}:{height}:force_original_aspect_ratio=increase,"
-                f"crop={width}:{height},zoompan=z='min(zoom+0.00025,1.02)':"
+                f"scale={width}:{height}:force_original_aspect_ratio=decrease,"
+                f"pad={width}:{height}:(ow-iw)/2:(oh-ih)/2:color=#101827,"
+                f"zoompan=z='min(zoom+0.00025,1.02)':"
                 f"d={frames}:s={width}x{height}:fps={fps},format=yuv420p"
             ),
             "-frames:v", str(frames), "-an", "-c:v", "libx264",
