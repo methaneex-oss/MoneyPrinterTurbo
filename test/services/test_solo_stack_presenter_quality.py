@@ -122,3 +122,28 @@ def test_presenter_overlay_fades_in_and_out_without_a_hard_pop():
         assert end_delta < middle_delta
     finally:
         composite.close()
+
+
+def test_presenter_auto_placement_avoids_a_visually_busy_zone():
+    from app.services.solo_stack_presenter import _overlay_position_scores
+
+    frame = np.full((640, 360, 3), 112, dtype=np.uint8)
+    # Simulate dense UI/text in the upper-right zone while the left and center
+    # remain visually quiet. The presenter should not default to that busy area.
+    yy, xx = np.indices((210, 150))
+    pattern = ((xx // 3 + yy // 3) % 2) * 220
+    frame[0:210, 210:360, :] = pattern[..., None]
+    scores = _overlay_position_scores(frame, (110, 180))
+    right_top = (360 - 110 - max(12, int(360 * 0.035)), max(8, int(640 * 0.04)))
+    selected = min(scores, key=lambda position: (scores[position], position[1], -position[0]))
+    assert selected != right_top
+    assert selected[1] + 180 <= int(640 * 0.66)
+
+
+def test_presenter_auto_placement_is_deterministic_for_uniform_scenes():
+    from app.services.solo_stack_presenter import _overlay_position_scores
+
+    frame = np.full((640, 360, 3), 112, dtype=np.uint8)
+    scores = _overlay_position_scores(frame, (110, 180))
+    selected = min(scores, key=lambda position: (scores[position], position[1], -position[0]))
+    assert selected == (360 - 110 - max(12, int(360 * 0.035)), max(8, int(640 * 0.04)))
