@@ -181,6 +181,20 @@ def build_presenter_frame(
               fill=ink, width=max(3, int(8*scale)))
     draw.line([p(262+head_x, 139+bob+brow_right), p(304+head_x, 144+bob+brow_right)],
               fill=ink, width=max(3, int(8*scale)))
+    # Natural eye blinks use the episode timeline, not a per-shot reset.
+    blink_phase = t % 4.2
+    if 0.16 <= blink_phase <= 0.29:
+        for left, right in ((178, 218), (260, 300)):
+            draw.line(
+                [p(left+head_x, 174+bob), p(right+head_x, 174+bob)],
+                fill=skin,
+                width=max(8, int(22*scale)),
+            )
+            draw.line(
+                [p(left+head_x, 174+bob), p(right+head_x, 174+bob)],
+                fill=ink,
+                width=max(2, int(4*scale)),
+            )
     # Nose and expressive mouth.
     draw.arc((*p(218+head_x, 184+bob), *p(261+head_x, 224+bob)), 285, 75,
              fill=_rgb("#B77F68"), width=max(2, int(3*scale)))
@@ -267,8 +281,9 @@ def add_presenter_overlay(
             activity_index = int(max(0.0, audio_offset + float(t)) * audio_activity_fps)
             if activity_index < len(audio_activity):
                 mouth_open = audio_activity[activity_index]
+        animation_time = max(0.0, audio_offset + float(t))
         return np.asarray(build_presenter_frame(
-            t, (target_w, target_h), expression, action=action, gaze=gaze,
+            animation_time, (target_w, target_h), expression, action=action, gaze=gaze,
             wardrobe=wardrobe, intensity=intensity, mouth_open=mouth_open,
         ).convert("RGB"))
 
