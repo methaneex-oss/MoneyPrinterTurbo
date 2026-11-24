@@ -255,3 +255,16 @@ def test_screen_recording_normalizer_preserves_aspect_and_drops_source_audio(tmp
     assert "-map" in command and "0:v:0" in command
     assert "-an" in command
     assert output.is_file()
+
+
+def test_identifies_claude_code_and_llama_cpp_as_distinct_official_sources():
+    products = identify_products(
+        "Claude Code vs llama.cpp",
+        "Compare Claude Code in the terminal with local llama.cpp inference.",
+        limit=3,
+    )
+    assert products == ["Claude Code", "llama.cpp"]
+    assert PRODUCTS["Claude Code"]["domain"] == "claude.com"
+    assert PRODUCTS["llama.cpp"]["url"] == "https://github.com/ggml-org/llama.cpp"
+    assert PRODUCTS["llama.cpp"]["source_label"] == "OFFICIAL PROJECT PAGE"
+    assert PRODUCTS["llama.cpp"]["asset_type"] == "official_project_page_capture"
