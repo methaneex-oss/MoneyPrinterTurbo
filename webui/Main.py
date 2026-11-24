@@ -8070,6 +8070,15 @@ def _render_background_music_settings(params, elevenlabs_api_key_rendered=False)
         (tr("Sonilo Background Music"), "sonilo"),
         (tr("ElevenLabs Background Music"), "elevenlabs"),
     ]
+    if bool(
+        config.app.get(
+            "solo_stack_free_only", config.app.get("solo_stack_mode", False)
+        )
+    ):
+        bgm_options = [
+            option for option in bgm_options
+            if option[1] not in {"sonilo", "elevenlabs"}
+        ]
     selected_bgm_type = stable_selectbox(
         tr("Background Music Source"),
         options=[value for _, value in bgm_options],
