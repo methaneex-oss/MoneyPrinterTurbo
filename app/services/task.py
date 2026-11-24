@@ -2526,7 +2526,7 @@ def _run_pipeline(
 
         # Discover topic-specific supporting stills from free image sources.
         # These clips are editorial support only and never satisfy product-evidence gates.
-        if bool(config.app.get("solo_stack_dynamic_visuals_enabled", True)):
+        if bool(config.app.get("solo_stack_dynamic_visuals_enabled", False)):
             try:
                 dynamic_visual_clips = solo_stack_visual_retrieval.prepare_dynamic_scene_visuals(
                     task_id=task_id,
