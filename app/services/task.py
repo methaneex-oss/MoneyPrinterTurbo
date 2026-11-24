@@ -552,6 +552,10 @@ def generate_script(task_id, params):
                 )
             else:
                 script_requirements = channel_requirements
+        if _solo_stack_free_only_enabled():
+            free_llm_error = _solo_stack_free_llm_error()
+            if free_llm_error:
+                raise RuntimeError(free_llm_error)
         video_script = llm.generate_script(
             video_subject=params.video_subject,
             language=params.video_language,
@@ -588,6 +592,10 @@ def generate_terms(task_id, params, video_script):
     logger.info("\n\n## generating video terms")
     video_terms = params.video_terms
     if not video_terms:
+        if _solo_stack_free_only_enabled():
+            free_llm_error = _solo_stack_free_llm_error()
+            if free_llm_error:
+                raise RuntimeError(free_llm_error)
         # 开启素材按文案顺序匹配后，关键词本身也必须按脚本叙事顺序生成；
         # 否则后续即使顺序下载和顺序拼接，也只能复用一组全局主题词，
         # 无法改善“后面内容的画面提前出现”的问题。
@@ -620,7 +628,7 @@ def generate_terms(task_id, params, video_script):
 
     # 可选的 TwelveLabs Marengo 语义重排：未启用时返回原顺序，无任何副作用。
     # 顺序匹配模式下关键词顺序本身就是脚本叙事顺序，必须保持原样，故跳过。
-    if not params.match_materials_to_script:
+    if not params.match_materials_to_script and not _solo_stack_free_only_enabled():
         video_terms = twelvelabs.rerank_terms_by_subject(
             video_subject=params.video_subject,
             search_terms=video_terms,
@@ -806,6 +814,11 @@ def generate_audio(
         return None, None, None
 
     if not custom_audio_file:
+        if _solo_stack_free_only_enabled():
+            free_voice_error = _solo_stack_free_voice_error(params)
+            if free_voice_error:
+                _mark_task_failed(task_id, "audio", free_voice_error)
+                return None, None, None
         reusable_preview = _resolve_reusable_voice_preview(
             task_id,
             params,
@@ -955,6 +968,11 @@ def get_video_materials(
     jalapeno_video_endpoint: volcengine_seedance.SeedanceEndpoint | None = None,
     codex_image_context: codex_image.CodexImageContext | None = None,
 ):
+    if _solo_stack_free_only_enabled():
+        free_video_error = _solo_stack_free_video_error(params)
+        if free_video_error:
+            _mark_task_failed(task_id, "materials", free_video_error)
+            return None
     if params.video_source == "animatediff":
         if not bool(config.app.get("allow_unverified_animatediff", False)):
             _mark_task_failed(
@@ -1380,6 +1398,15 @@ def generate_final_videos(
         semantic_threshold = max(-1.0, min(1.0, semantic_threshold))
     except (TypeError, ValueError):
         semantic_threshold = 0.20
+    if (
+        _solo_stack_free_only_enabled()
+        and params.bgm_type in _VIDEO_MUSIC_PROVIDERS
+        and bgm_service.should_use_bgm(params.bgm_type, params.bgm_volume)
+    ):
+        raise RuntimeError(
+            "Solo Stack free-only mode blocks external Sonilo/ElevenLabs music "
+            "generation. Select local/random background music or disable BGM."
+        )
     video_music_provider = _VIDEO_MUSIC_PROVIDERS.get(params.bgm_type)
     video_music_requested = (
         video_music_provider is not None
