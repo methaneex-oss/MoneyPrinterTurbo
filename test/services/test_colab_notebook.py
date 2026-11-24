@@ -2,7 +2,6 @@ import ast
 import json
 from pathlib import Path
 
-
 def test_colab_notebook_tracks_active_branch_and_persists_task_state():
     notebook_path = Path(__file__).resolve().parents[2] / "docs" / "MoneyPrinterTurbo.ipynb"
     notebook = json.loads(notebook_path.read_text(encoding="utf-8"))
@@ -23,7 +22,6 @@ def test_colab_notebook_tracks_active_branch_and_persists_task_state():
     assert "app['solo_stack_mode'] = True" in config_cell
     assert "app['solo_stack_free_only'] = True" in config_cell
 
-
 def test_colab_task_migration_merges_and_verifies_before_removing_local_data():
     notebook_path = Path(__file__).resolve().parents[2] / "docs" / "MoneyPrinterTurbo.ipynb"
     notebook = json.loads(notebook_path.read_text(encoding="utf-8"))
@@ -38,7 +36,6 @@ def test_colab_task_migration_merges_and_verifies_before_removing_local_data():
     assert ".drive-backup" in migration_cell
     assert migration_cell.index("filecmp.cmp(") < migration_cell.index("shutil.rmtree(TASKS_DIR)")
     assert "dirs_exist_ok=True" not in migration_cell
-
 
 def test_colab_local_ai_image_setup_is_syntax_valid_and_has_safe_fallback():
     notebook_path = Path(__file__).resolve().parents[2] / "docs" / "MoneyPrinterTurbo.ipynb"
@@ -101,7 +98,6 @@ def test_colab_local_ai_image_setup_is_syntax_valid_and_has_safe_fallback():
     assert 'path = Path("config.toml")' not in image_cell
     assert image_cell.index("warmup_request") < image_cell.rindex('set_video_source(\n            "openai_image"')
 
-
 def test_colab_animatediff_setup_is_syntax_valid_and_isolated():
     notebook_path = Path(__file__).resolve().parents[2] / "docs" / "MoneyPrinterTurbo.ipynb"
     notebook = json.loads(notebook_path.read_text(encoding="utf-8"))
@@ -125,8 +121,6 @@ def test_colab_animatediff_setup_is_syntax_valid_and_isolated():
     assert "No paid fallback" in video_cell
     assert "ALLOW_ANIMATEDIFF_EXPERIMENTAL = False" in video_cell
     assert video_cell.index("if not ALLOW_ANIMATEDIFF_EXPERIMENTAL:") < video_cell.index("torch.cuda.is_available()")
-
-
 
 def test_colab_kokoro_setup_is_syntax_valid_and_persists_config_to_drive():
     notebook_path = Path(__file__).resolve().parents[2] / "docs" / "MoneyPrinterTurbo.ipynb"
