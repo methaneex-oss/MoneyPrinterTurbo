@@ -195,6 +195,25 @@ class TestTaskService(unittest.TestCase):
         mark_failed.assert_called_once()
         tts.assert_not_called()
 
+    def test_solo_stack_free_only_blocks_external_music_providers(self):
+        params = SimpleNamespace(bgm_type="elevenlabs", bgm_volume=0.2)
+        with (
+            patch.dict(
+                tm.config.app,
+                {"solo_stack_mode": True, "solo_stack_free_only": True},
+            ),
+            patch.object(tm.bgm_service, "should_use_bgm", return_value=True),
+        ):
+            self.assertIsNotNone(tm._solo_stack_free_bgm_error(params))
+
+        params.bgm_type = "random"
+        with patch.dict(
+            tm.config.app,
+            {"solo_stack_mode": True, "solo_stack_free_only": True},
+        ):
+            self.assertIsNone(tm._solo_stack_free_bgm_error(params))
+
+
     def test_paid_video_provider_is_blocked_before_provider_request(self):
         params = SimpleNamespace(video_source="ofox")
         with (
