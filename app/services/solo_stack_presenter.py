@@ -402,11 +402,94 @@ def build_presenter_frame(
 
 
 
+def _overlay_position_scores(frame, overlay_size: tuple[int, int]) -> dict[tuple[int, int], float]:
+    """Score safe presenter zones by sampled visual complexity in the source frame.
+
+    The lower subtitle band is intentionally excluded. A stable candidate order
+    makes uniform footage deterministic while visual evidence can move the host
+    to a genuinely less obstructive region.
+    """
+    import numpy as np
+
+    frame = np.asarray(frame)
+    if frame.ndim != 3 or frame.shape[2] < 3:
+        raise ValueError("presenter placement requires an RGB video frame")
+    height, width = frame.shape[:2]
+    overlay_w, overlay_h = (int(value) for value in overlay_size)
+    if min(width, height, overlay_w, overlay_h) <= 0:
+        raise ValueError("presenter placement dimensions must be positive")
+
+    margin_x = max(12, int(width * 0.035))
+    x_values = (
+        max(0, width - overlay_w - margin_x),
+        margin_x,
+        max(0, (width - overlay_w) // 2),
+    )
+    # Keep the full host above the lower subtitle-safe boundary.
+    y_values = (
+        max(8, int(height * 0.04)),
+        max(8, int(height * 0.16)),
+        max(8, int(height * 0.28)),
+    )
+    scores = {}
+    for y in y_values:
+        for x in x_values:
+            right = min(width, x + overlay_w)
+            bottom = min(int(height * 0.66), y + overlay_h)
+            top = min(y, max(0, bottom - 1))
+            left = min(x, max(0, right - 1))
+            patch = frame[top:bottom, left:right, :3]
+            if patch.size == 0:
+                scores[(x, y)] = float("inf")
+                continue
+            # Downsample before scoring: this is a placement heuristic, not
+            # object recognition, and should add negligible render overhead.
+            ys = np.linspace(0, patch.shape[0] - 1, min(20, patch.shape[0])).astype(int)
+            xs = np.linspace(0, patch.shape[1] - 1, min(20, patch.shape[1])).astype(int)
+            small = patch[ys][:, xs].astype(np.float32)
+            gray = small[..., 0] * 0.299 + small[..., 1] * 0.587 + small[..., 2] * 0.114
+            texture = float(gray.std())
+            edges = float(
+                (np.abs(np.diff(gray, axis=0)).mean() if gray.shape[0] > 1 else 0)
+                + (np.abs(np.diff(gray, axis=1)).mean() if gray.shape[1] > 1 else 0)
+            )
+            luminance = float(gray.mean())
+            exposure_penalty = max(0.0, 24.0 - luminance) + max(0.0, luminance - 232.0)
+            scores[(x, y)] = texture * 0.55 + edges * 0.9 + exposure_penalty * 0.25
+    return scores
+
+
+def _choose_overlay_position(clip, overlay_size: tuple[int, int]) -> tuple[int, int]:
+    """Choose a low-obstruction upper/middle zone from several actual clip frames."""
+    import numpy as np
+
+    duration = max(0.0, float(getattr(clip, "duration", 0.0) or 0.0))
+    sample_times = sorted({
+        min(max(0.0, duration * fraction), max(0.0, duration - 0.04))
+        for fraction in (0.18, 0.5, 0.82)
+    })
+    combined = {}
+    for sample_time in sample_times:
+        try:
+            scores = _overlay_position_scores(clip.get_frame(sample_time), overlay_size)
+        except Exception:
+            continue
+        for position, score in scores.items():
+            combined[position] = combined.get(position, 0.0) + score
+    if not combined:
+        width, height = (int(value) for value in clip.size)
+        overlay_w, overlay_h = overlay_size
+        return max(12, width - overlay_w - int(width * 0.035)), max(12, int(height * 0.045))
+    # The candidate insertion order preserves the familiar upper-right
+    # placement only when the sampled composition offers no better alternative.
+    return min(combined, key=lambda position: (combined[position], position[1], -position[0]))
+
+
 def add_presenter_overlay(
     clip,
     *,
     expression: str = "talk",
-    corner: str = "right",
+    corner: str = "auto",
     acting_direction: dict | None = None,
     max_duration: float = 3.5,
     duration_fraction: float = 0.46,
@@ -447,10 +530,18 @@ def add_presenter_overlay(
         fraction, cap = 0.46, 3.5
     target_h = min(int(height * 0.34), 380)
     target_w = int(target_h * 480 / 560)
-    x = max(12, width - target_w - int(width * 0.035)) if corner == "right" else int(width * 0.035)
-    # Keep Stack in the upper safe zone; subtitles occupy the lower third,
-    # and product-evidence clips are excluded from presenter overlays.
-    y = max(12, int(height * 0.045))
+    # Placement is chosen from the actual scene frames, not an alternating
+    # left/right template. Explicit legacy corners remain supported for callers
+    # that intentionally request a fixed side.
+    if corner == "auto":
+        x, y = _choose_overlay_position(clip, (target_w, target_h))
+    else:
+        x = (
+            max(12, width - target_w - int(width * 0.035))
+            if corner == "right" else int(width * 0.035)
+        )
+        y = max(12, int(height * 0.045))
+    # The placement scorer never enters the lower subtitle-safe band.
     duration = min(clip_duration * fraction, cap)
 
     @lru_cache(maxsize=4)
