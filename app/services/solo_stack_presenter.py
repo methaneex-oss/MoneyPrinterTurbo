@@ -52,6 +52,7 @@ def build_presenter_frame(
     gaze: str = "camera",
     wardrobe: str = "base",
     intensity: float = 0.85,
+    mouth_open: float = 0.0,
 ) -> Image.Image:
     """Render one transparent, deterministic character frame."""
     width, height = (max(160, int(v)) for v in size)
@@ -180,10 +181,31 @@ def build_presenter_frame(
               fill=ink, width=max(3, int(8*scale)))
     draw.line([p(262+head_x, 139+bob+brow_right), p(304+head_x, 144+bob+brow_right)],
               fill=ink, width=max(3, int(8*scale)))
+    # Natural eye blinks use the episode timeline, not a per-shot reset.
+    blink_phase = t % 4.2
+    if 0.16 <= blink_phase <= 0.29:
+        for left, right in ((178, 218), (260, 300)):
+            draw.line(
+                [p(left+head_x, 174+bob), p(right+head_x, 174+bob)],
+                fill=skin,
+                width=max(8, int(22*scale)),
+            )
+            draw.line(
+                [p(left+head_x, 174+bob), p(right+head_x, 174+bob)],
+                fill=ink,
+                width=max(2, int(4*scale)),
+            )
     # Nose and expressive mouth.
     draw.arc((*p(218+head_x, 184+bob), *p(261+head_x, 224+bob)), 285, 75,
              fill=_rgb("#B77F68"), width=max(2, int(3*scale)))
-    if mouth == "surprised":
+    opening = _clamp(mouth_open, 0.0, 1.0)
+    if opening > 0.12:
+        mouth_height = 7 + 21 * opening
+        ellipse((224+head_x, 220+bob, 256+head_x, 220+bob+mouth_height), ink)
+        if opening > 0.55:
+            ellipse((232+head_x, 220+bob+mouth_height*0.62,
+                     248+head_x, 220+bob+mouth_height*0.88), coral)
+    elif mouth == "surprised":
         ellipse((222+head_x, 213+bob, 258+head_x, 254+bob), coral, ink, 3)
     elif mouth == "concerned":
         draw.arc((*p(215+head_x, 226+bob), *p(266+head_x, 255+bob)), 185, 350,
@@ -210,8 +232,13 @@ def add_presenter_overlay(
     expression: str = "talk",
     corner: str = "right",
     acting_direction: dict | None = None,
+    max_duration: float = 3.5,
+    duration_fraction: float = 0.46,
+    audio_activity: list[float] | None = None,
+    audio_activity_fps: int = 25,
+    audio_offset: float = 0.0,
 ):
-    """Composite Stack with episode-specific acting over an opening clip."""
+    """Composite Stack with scene-specific acting and audio-reactive mouth motion."""
     import numpy as np
     from moviepy import CompositeVideoClip, VideoClip
 
@@ -234,18 +261,30 @@ def add_presenter_overlay(
         intensity = 0.85
 
     width, height = (int(value) for value in clip.size)
-    if width < 360 or height < 360 or float(clip.duration or 0) < 0.6:
+    clip_duration = float(clip.duration or 0)
+    if width < 360 or height < 360 or clip_duration < 1.5:
         return clip
-    target_h = min(int(height * 0.38), 420)
+    try:
+        fraction = _clamp(float(duration_fraction), 0.2, 0.8)
+        cap = max(0.8, min(float(max_duration), 8.0))
+    except (TypeError, ValueError):
+        fraction, cap = 0.46, 3.5
+    target_h = min(int(height * 0.34), 380)
     target_w = int(target_h * 480 / 560)
     x = max(12, width - target_w - int(width * 0.035)) if corner == "right" else int(width * 0.035)
     y = max(12, height - target_h - int(height * 0.035))
-    duration = min(float(clip.duration), 12.0)
+    duration = min(clip_duration * fraction, cap)
 
     def frame(t):
+        mouth_open = 0.0
+        if audio_activity and audio_activity_fps > 0:
+            activity_index = int(max(0.0, audio_offset + float(t)) * audio_activity_fps)
+            if activity_index < len(audio_activity):
+                mouth_open = audio_activity[activity_index]
+        animation_time = max(0.0, audio_offset + float(t))
         return np.asarray(build_presenter_frame(
-            t, (target_w, target_h), expression, action=action, gaze=gaze,
-            wardrobe=wardrobe, intensity=intensity,
+            animation_time, (target_w, target_h), expression, action=action, gaze=gaze,
+            wardrobe=wardrobe, intensity=intensity, mouth_open=mouth_open,
         ).convert("RGB"))
 
     overlay = VideoClip(frame, duration=duration).with_position((x, y))

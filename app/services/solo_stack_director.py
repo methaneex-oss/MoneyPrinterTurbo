@@ -85,3 +85,38 @@ def plan_performance(script: str, subject: str = "") -> dict[str, str | float]:
         "wardrobe": wardrobe,
         "seed": digest[2],
     }
+
+
+_SCENE_FALLBACKS = (
+    ("present", "talk", "evidence"),
+    ("question", "curious", "camera"),
+    ("think", "thoughtful", "up"),
+)
+
+
+def plan_scene_performance(
+    scene_label: str,
+    scene_index: int,
+    base_direction: dict | None = None,
+) -> dict[str, str | float]:
+    """Choose a short, scene-aware host beat without changing host identity."""
+    label = _clean(scene_label, 500)
+    base = dict(base_direction) if isinstance(base_direction, dict) else {}
+    if not label:
+        return base
+
+    scene = plan_performance(label, label)
+    if scene.get("emotion") == "explaining":
+        # Labels often contain only a product or workflow noun. Preserve the
+        # episode-level emotion, but vary neutral gestures deterministically.
+        gesture = _SCENE_FALLBACKS[int(scene_index) % len(_SCENE_FALLBACKS)]
+        scene.update({
+            "action": gesture[0],
+            "expression": gesture[1],
+            "gaze": gesture[2],
+            "emotion": base.get("emotion", "explaining"),
+        })
+    if "wardrobe" not in scene or scene.get("wardrobe") == "base":
+        scene["wardrobe"] = base.get("wardrobe", "base")
+    scene["intensity"] = base.get("intensity", scene.get("intensity", 0.82))
+    return scene

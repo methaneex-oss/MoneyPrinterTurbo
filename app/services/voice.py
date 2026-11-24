@@ -1165,6 +1165,7 @@ def tts(
     voxcpm_reference_audio: bytes | None = None,
     voxcpm_prompt_audio: bytes | None = None,
     voxcpm_prompt_text: str = "",
+    performance_direction: dict | None = None,
 ) -> Union[SubMaker, None]:
     # Emoji are not narrated: Edge TTS reads their names aloud ("chart
     # increasing"), and each one gets its own word boundary.
@@ -1173,6 +1174,25 @@ def tts(
         logger.warning("the script has no text to narrate once emoji are removed")
         return None
     text = narration
+    # Solo Stack's optional Kokoro SSML path changes sentence pacing only; the
+    # selected voice ID remains fixed. Keep legacy pause-tag handling untouched.
+    if (
+        is_kokoro_voice(voice_name)
+        and isinstance(performance_direction, dict)
+        and config.kokoro.get("solo_stack_performance_enabled", False)
+        and not utils.has_pause_tags(text)
+    ):
+        kokoro_voice = voice_name.split(":", 1)[1].strip()
+        if kokoro_voice.endswith(("-Female", "-Male")):
+            kokoro_voice = kokoro_voice.rsplit("-", 1)[0]
+        return kokoro_tts(
+            text=text,
+            voice=kokoro_voice,
+            voice_file=voice_file,
+            voice_rate=voice_rate,
+            voice_volume=voice_volume,
+            performance_direction=performance_direction,
+        )
     # 无停顿标签时，原样直通原始文本，避免无意义的正则处理或空白截断
     if not utils.has_pause_tags(text):
         return _single_tts(
@@ -2720,6 +2740,8 @@ def _openai_compatible_tts(
     text: str,
     voice_rate: float,
     voice_file: str,
+    extra_payload: dict | None = None,
+    subtitle_text: str | None = None,
 ) -> Union[SubMaker, None]:
     """Shared transport for self-hosted, OpenAI-compatible ``/audio/speech``
     servers (Chatterbox, Kokoro, ...).
@@ -2741,6 +2763,12 @@ def _openai_compatible_tts(
         # 1.0-centred multiplier, so it maps directly (clamped to the valid range).
         "speed": max(0.25, min(4.0, float(voice_rate or 1.0))),
     }
+    if extra_payload:
+        # Only the two explicitly supported Kokoro-FastAPI controls are allowed
+        # through this shared OpenAI-compatible transport.
+        for key in ("ssml", "allow_voice_tags"):
+            if key in extra_payload:
+                payload[key] = bool(extra_payload[key])
     # OpenAI speech 协议没有音量字段；最终混音阶段应用 voice_volume。
     # speed 仅调节语速，不能作为音量参数使用。
 
@@ -2791,7 +2819,7 @@ def _openai_compatible_tts(
             logger.success(f"{provider} tts succeeded: {voice_file}")
             return populate_legacy_submaker_with_full_text(
                 sub_maker=sub_maker,
-                text=text,
+                text=subtitle_text if subtitle_text is not None else text,
                 audio_duration_seconds=audio_duration,
             )
         except requests.exceptions.ConnectTimeout:
@@ -2872,6 +2900,7 @@ def kokoro_tts(
     voice_rate: float = 1.0,
     voice_volume: float = 1.0,
     model_id: str = "",
+    performance_direction: dict | None = None,
 ) -> Union[SubMaker, None]:
     """Generate speech with a self-hosted Kokoro TTS server.
 
@@ -2909,8 +2938,20 @@ def kokoro_tts(
     api_key = config.kokoro.get("api_key", "")
     if not model_id:
         model_id = config.kokoro.get("model_id", "kokoro") or "kokoro"
+    subtitle_text = text
+    extra_payload = None
+    if (
+        isinstance(performance_direction, dict)
+        and config.kokoro.get("solo_stack_performance_enabled", False)
+    ):
+        from app.services.solo_stack_voice import build_kokoro_performance_ssml
+
+        text = build_kokoro_performance_ssml(text)
+        extra_payload = {"ssml": True, "allow_voice_tags": True}
     return _openai_compatible_tts(
-        "kokoro", base_url, api_key, model_id, voice, text, voice_rate, voice_file
+        "kokoro", base_url, api_key, model_id, voice, text, voice_rate, voice_file,
+        extra_payload=extra_payload,
+        subtitle_text=subtitle_text,
     )
 
 

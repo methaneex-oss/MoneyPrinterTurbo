@@ -37,6 +37,7 @@ from app.services import (
     subtitle,
     scene_planner,
     solo_stack_director,
+    solo_stack_product_media,
     task_artifacts,
     twelvelabs,
     useapi,
@@ -638,6 +639,14 @@ def generate_audio(
             "voice_rate": params.voice_rate,
             "voice_file": audio_file,
         }
+        if (
+            bool(config.app.get("solo_stack_mode", False))
+            and bool(config.app.get("solo_stack_voice_performance_enabled", True))
+            and voice.is_kokoro_voice(voice.parse_voice_name(params.voice_name))
+        ):
+            tts_kwargs["performance_direction"] = solo_stack_director.plan_performance(
+                video_script, params.video_subject
+            )
         if voxcpm_reference_audio is not None:
             tts_kwargs["voxcpm_reference_audio"] = voxcpm_reference_audio
         if voxcpm_prompt_audio is not None:
@@ -1082,6 +1091,14 @@ def _get_material_scene_labels(task_id: str, video_paths: list[str]) -> dict[str
         return source_groups
 
 
+def _solo_stack_presenter_enabled() -> bool:
+    """Keep the recurring channel host out of ordinary MoneyPrinterTurbo videos."""
+    return bool(
+        config.app.get("solo_stack_mode", False)
+        and config.app.get("solo_stack_presenter_enabled", True)
+    )
+
+
 def generate_final_videos(
     task_id, params, downloaded_videos, audio_file, subtitle_path, audio_duration,
     *, partial_results: dict | None = None,
@@ -1146,7 +1163,8 @@ def generate_final_videos(
         and bgm_service.should_use_bgm(params.bgm_type, params.bgm_volume)
     )
     # Matching preserves keyword order; batch allocation varies each keyword's candidates.
-    if params.match_materials_to_script:
+    if params.match_materials_to_script or bool(config.app.get("solo_stack_mode", False)):
+        # Solo Stack app demonstrations must remain in the episode's narrative order.
         video_concat_mode = VideoConcatMode.sequential
     elif params.video_count == 1:
         video_concat_mode = params.video_concat_mode
@@ -1186,7 +1204,7 @@ def generate_final_videos(
             video_fit_mode=params.video_fit_mode,
             video_concat_mode=video_concat_mode,
             video_transition_mode=video_transition_mode,
-            solo_stack_presenter_enabled=bool(config.app.get("solo_stack_presenter_enabled", True)),
+            solo_stack_presenter_enabled=_solo_stack_presenter_enabled(),
             presenter_direction=(
                 solo_stack_director.plan_performance(video_script, params.video_subject)
                 if bool(config.app.get("solo_stack_mode", False)) else None
@@ -2091,6 +2109,35 @@ def _run_pipeline(
         **({"jalapeno_video_endpoint": jalapeno_video_endpoint}
            if jalapeno_video_endpoint is not None else {}),
     )
+    # Solo Stack supplements stock footage with real public product visuals
+    # from official vendor pages when the episode explicitly names a supported app.
+    # This is a no-cost capture path; any browser/network failure leaves the
+    # existing media workflow intact.
+    if bool(config.app.get("solo_stack_mode", False)):
+        try:
+            product_visual_clips = solo_stack_product_media.prepare_episode_product_visuals(
+                task_id=task_id,
+                subject=params.video_subject,
+                script=video_script,
+                terms=video_terms,
+                aspect=getattr(params.video_aspect, "value", params.video_aspect),
+                duration=max(3.0, min(6.0, float(params.video_clip_duration or 4))),
+                max_products=2,
+            )
+            if product_visual_clips:
+                downloaded_videos = solo_stack_product_media.interleave_product_visuals(
+                    downloaded_videos or [],
+                    product_visual_clips,
+                )
+                logger.info(
+                    "added {} official Solo Stack product visual clips".format(len(product_visual_clips)),
+                )
+        except Exception as exc:
+            logger.warning(
+                "official Solo Stack product visual capture skipped; "
+                "continuing with existing media: {}".format(exc),
+            )
+
     if not downloaded_videos:
         return _mark_task_failed(
             task_id,
