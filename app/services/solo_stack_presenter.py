@@ -184,7 +184,14 @@ def build_presenter_frame(
     # Nose and expressive mouth.
     draw.arc((*p(218+head_x, 184+bob), *p(261+head_x, 224+bob)), 285, 75,
              fill=_rgb("#B77F68"), width=max(2, int(3*scale)))
-    if mouth == "surprised":
+    opening = _clamp(mouth_open, 0.0, 1.0)
+    if opening > 0.12:
+        mouth_height = 7 + 21 * opening
+        ellipse((224+head_x, 220+bob, 256+head_x, 220+bob+mouth_height), ink)
+        if opening > 0.55:
+            ellipse((232+head_x, 220+bob+mouth_height*0.62,
+                     248+head_x, 220+bob+mouth_height*0.88), coral)
+    elif mouth == "surprised":
         ellipse((222+head_x, 213+bob, 258+head_x, 254+bob), coral, ink, 3)
     elif mouth == "concerned":
         draw.arc((*p(215+head_x, 226+bob), *p(266+head_x, 255+bob)), 185, 350,
@@ -192,13 +199,6 @@ def build_presenter_frame(
     elif mouth == "pleased":
         draw.arc((*p(210+head_x, 202+bob), *p(270+head_x, 254+bob)), 5, 175,
                  fill=ink, width=max(3, int(6*scale)))
-    elif mouth == "talk" and _clamp(mouth_open, 0.0, 1.0) > 0.12:
-        opening = _clamp(mouth_open, 0.0, 1.0)
-        mouth_height = 7 + 21 * opening
-        ellipse((224+head_x, 220+bob, 256+head_x, 220+bob+mouth_height), ink)
-        if opening > 0.55:
-            ellipse((232+head_x, 220+bob+mouth_height*0.62,
-                     248+head_x, 220+bob+mouth_height*0.88), coral)
     else:
         draw.arc((*p(211+head_x, 205+bob), *p(269+head_x, 247+bob)), 5, 175,
                  fill=ink, width=max(3, int(5*scale)))
