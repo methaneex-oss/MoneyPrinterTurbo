@@ -1367,8 +1367,10 @@ def _solo_stack_product_visual_blockers(task_id: str) -> list[str]:
     payload = {}
     coverage = None
     try:
-        payload = json.loads(script_path.read_text(encoding="utf-8"))
-        coverage = payload.get("product_visual_coverage")
+        loaded_payload = json.loads(script_path.read_text(encoding="utf-8"))
+        if isinstance(loaded_payload, dict):
+            payload = loaded_payload
+            coverage = payload.get("product_visual_coverage")
     except (OSError, ValueError, TypeError):
         pass
     capture_error = (
