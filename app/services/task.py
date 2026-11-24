@@ -1364,6 +1364,7 @@ def _solo_stack_product_visual_blockers(task_id: str) -> list[str]:
     task_dir = Path(utils.task_dir(task_id))
     script_path = task_dir / "script.json"
     manifest_path = task_dir / "solo_stack" / "product_visuals" / "manifest.json"
+    payload = {}
     coverage = None
     try:
         payload = json.loads(script_path.read_text(encoding="utf-8"))
@@ -1372,8 +1373,7 @@ def _solo_stack_product_visual_blockers(task_id: str) -> list[str]:
         pass
     capture_error = (
         payload.get("product_visual_capture_error")
-        if "payload" in locals() and isinstance(payload, dict)
-        else None
+        if isinstance(payload, dict) else None
     )
     if capture_error:
         return ["product_visual_capture_unavailable"]
