@@ -184,7 +184,10 @@ def identify_products(subject: str, script: str, terms=None, limit: int = 3) -> 
 
     selected = []
     selected_spans = []
-    for start, end, _specificity, name, alias in sorted(candidates):
+    for start, end, _specificity, name, alias in sorted(
+        candidates,
+        key=lambda item: (item[0], item[2], item[1], item[3]),
+    ):
         # A broad product alias must not shadow a more specific name at the
         # same location (Claude Code should not consume a separate Claude slot).
         contained = any(
