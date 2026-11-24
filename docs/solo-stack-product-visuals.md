@@ -39,6 +39,24 @@ image sites, download random screenshots, or generate fake application UIs.
 Images are taken from the official page's own image elements where possible;
 a page screenshot is used only when no suitable image can be extracted.
 
+## Operator-captured app evidence
+
+The WebUI asset library is now connected to episode generation. When an episode
+explicitly names a product, the pipeline first looks for matching operator-
+supplied screenshots, screen recordings or demo media in the persistent
+`storage/solo_stack` library. It checks each file against its recorded SHA-256
+digest and rejects missing, modified, symlinked or path-escaping files. Matching
+captures are rendered into the timeline before public product-page imagery is
+used to fill the remaining visual slots.
+
+Screenshot cards are labelled **USER-CAPTURED APP VISUAL**. Screen recordings
+are normalized to the requested aspect ratio without stretching the interface;
+their original audio is removed so it cannot conflict with the narration track.
+Logos are retained in the library but are not treated as demonstration footage.
+If no matching operator capture exists, the official public-page path remains
+available. The system does not invent a recording or claim a public marketing
+image proves that a workflow was executed.
+
 ## Important distinction
 
 These are authentic public product-page visuals, not recordings of an authenticated
@@ -63,8 +81,9 @@ The official product visuals are deterministically distributed through the exist
 
 ## Verification
 
-Unit tests cover product identification, allowlisted official sources and
-branded card rendering. These tests do not prove vendor websites remain unchanged
+Unit tests cover product identification, allowlisted official sources, verified
+operator-asset selection and tamper detection, screen-recording normalization,
+and branded card rendering. These tests do not prove vendor websites remain unchanged
 or that every official page permits automated capture. Live Colab browser capture,
 the resulting video, visual readability and commercial asset clearance still
 require real-runtime review.
