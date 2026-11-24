@@ -217,6 +217,55 @@ class TestTaskService(unittest.TestCase):
 
         self.assertEqual(blockers, [])
 
+    def test_named_product_without_coverage_fails_closed(self):
+        with tempfile.TemporaryDirectory() as directory:
+            Path(directory, "script.json").write_text(
+                '{"script":"Canva can turn a rough brief into a finished design.",'
+                '"params":{"video_subject":"Canva workflow"}}',
+                encoding="utf-8",
+            )
+            with patch.object(tm.utils, "task_dir", return_value=directory):
+                blockers = tm._solo_stack_product_visual_blockers("visual-task")
+
+        self.assertEqual(blockers, ["product_visual_coverage_unavailable"])
+
+    def test_product_coverage_missing_a_named_product_blocks_release(self):
+        with tempfile.TemporaryDirectory() as directory:
+            Path(directory, "script.json").write_text(
+                '{"script":"Compare ChatGPT and Claude for research.",'
+                '"params":{"video_subject":"ChatGPT vs Claude"},'
+                '"product_visual_coverage":['
+                '{"product":"ChatGPT","visual_count":2,"status":"available"}]}',
+                encoding="utf-8",
+            )
+            with patch.object(tm.utils, "task_dir", return_value=directory):
+                blockers = tm._solo_stack_product_visual_blockers("visual-task")
+
+        self.assertEqual(blockers, ["missing_product_visuals:Claude"])
+
+    def test_malformed_product_coverage_blocks_release(self):
+        with tempfile.TemporaryDirectory() as directory:
+            Path(directory, "script.json").write_text(
+                '{"product_visual_coverage":[null]}',
+                encoding="utf-8",
+            )
+            with patch.object(tm.utils, "task_dir", return_value=directory):
+                blockers = tm._solo_stack_product_visual_blockers("visual-task")
+
+        self.assertEqual(blockers, ["product_visual_coverage_unavailable"])
+
+    def test_no_supported_product_does_not_require_product_visuals(self):
+        with tempfile.TemporaryDirectory() as directory:
+            Path(directory, "script.json").write_text(
+                '{"script":"A practical guide to better client onboarding.",'
+                '"params":{"video_subject":"Client onboarding workflow"}}',
+                encoding="utf-8",
+            )
+            with patch.object(tm.utils, "task_dir", return_value=directory):
+                blockers = tm._solo_stack_product_visual_blockers("visual-task")
+
+        self.assertEqual(blockers, [])
+
     def test_solo_stack_free_only_blocks_external_music_providers(self):
         params = SimpleNamespace(bgm_type="elevenlabs", bgm_volume=0.2)
         with (
