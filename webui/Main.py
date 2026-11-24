@@ -14,6 +14,7 @@ import webbrowser
 from collections.abc import Mapping
 from datetime import datetime
 from pathlib import Path
+from urllib.parse import urlparse
 from uuid import UUID, uuid4
 
 import requests
@@ -155,10 +156,35 @@ VIDEO_SOURCE_GROUPS = {
 }
 
 
+def _is_loopback_http_url(value):
+    try:
+        parsed = urlparse(str(value or "").strip())
+    except ValueError:
+        return False
+    return (
+        parsed.scheme == "http"
+        and parsed.hostname in {"127.0.0.1", "localhost", "::1"}
+    )
+
+
 def _available_video_source_groups(settings=None):
     settings = settings or config.snapshot_config_with_pending(config.app)
     groups = dict(VIDEO_SOURCE_GROUPS)
-    if not bool(settings.get("allow_unverified_animatediff", False)):
+    allow_animatediff = bool(settings.get("allow_unverified_animatediff", False))
+    free_only = bool(
+        settings.get("solo_stack_free_only", settings.get("solo_stack_mode", False))
+    )
+    if free_only:
+        # Solo Stack's normal production path is restricted to the configured
+        # free Pixabay source, user-supplied media and a warmed loopback image server.
+        groups["stock_video"] = ("pixabay",)
+        groups["ai_video"] = ("animatediff",) if allow_animatediff else ()
+        local_image_ready = (
+            bool(settings.get("solo_stack_local_image_ready", False))
+            and _is_loopback_http_url(settings.get("openai_image_base_url"))
+        )
+        groups["ai_image"] = ("openai_image",) if local_image_ready else ()
+    elif not allow_animatediff:
         groups["ai_video"] = tuple(
             provider for provider in groups["ai_video"]
             if provider != "animatediff"
@@ -3538,14 +3564,17 @@ def _activate_general_provider(section):
 
 
 def _render_general_settings(settings):
-    if (
-        settings.get("video_source") == "animatediff"
-        and not bool(settings.get("allow_unverified_animatediff", False))
-    ):
+    available_groups = _available_video_source_groups(settings)
+    available_sources = {
+        provider
+        for providers in available_groups.values()
+        for provider in providers
+    }
+    if settings.get("video_source") not in available_sources:
         settings = dict(settings)
         settings["video_source"] = "pixabay"
         _set_runtime_config("app", "video_source", "pixabay")
-    available_groups = _available_video_source_groups(settings)
+        available_groups = _available_video_source_groups(settings)
     configured = _general_provider_readiness(settings)
     material_labels = _material_provider_labels()
     llm_labels = {
