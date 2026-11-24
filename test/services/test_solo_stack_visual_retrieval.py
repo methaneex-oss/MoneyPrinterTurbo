@@ -45,6 +45,13 @@ def test_dynamic_download_rejects_untrusted_hosts(tmp_path):
     assert not (tmp_path / "image.png").exists()
 
 
+def test_dynamic_download_rejects_credentials_even_on_allowed_host(tmp_path):
+    candidate = {
+        "image_url": "https://untrusted@cdn.pixabay.com/image.jpg"
+    }
+    assert retrieval._download_image(candidate, tmp_path / "image.png") is None
+
+
 def test_cache_expires_and_round_trips(tmp_path, monkeypatch):
     cache = retrieval._cache_path(tmp_path, "llama.cpp local inference", "commons")
     retrieval._write_cache(cache, [{"title": "llama.cpp"}])
