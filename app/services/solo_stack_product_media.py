@@ -404,7 +404,16 @@ def _official_source_from_search(product: str) -> dict | None:
         ):
             continue
         title = str(result.get("title") or "").casefold()
-        host_label = host.removeprefix("www.").split(".")[0].replace("-", " ")
+        host_parts = host.removeprefix("www.").split(".")
+        if (
+            len(host_parts) >= 3
+            and len(host_parts[-1]) == 2
+            and host_parts[-2] in {"co", "com", "org", "net", "gov", "ac"}
+        ):
+            registered_label = host_parts[-3]
+        else:
+            registered_label = host_parts[-2] if len(host_parts) > 1 else host_parts[0]
+        host_label = registered_label.replace("-", " ")
         haystack = title + " " + host_label
         overlap = sum(1 for token in product_tokens if token in haystack)
         if product_tokens and overlap / len(product_tokens) < 0.5:
