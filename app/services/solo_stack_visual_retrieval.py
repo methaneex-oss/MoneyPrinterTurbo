@@ -254,6 +254,14 @@ def _download_image(item: dict, destination: Path) -> Path | None:
             return None
         response = requests.get(str(url), stream=True, timeout=(10, 30))
         try:
+            final_url = urlparse(response.url)
+            if (
+                final_url.scheme != "https"
+                or final_url.hostname not in _ALLOWED_IMAGE_HOSTS
+                or final_url.username is not None
+                or final_url.password is not None
+            ):
+                return None
             response.raise_for_status()
             content_type = response.headers.get("content-type", "")
             content_type = content_type.split(";", 1)[0].lower()
@@ -288,7 +296,12 @@ def _download_image(item: dict, destination: Path) -> Path | None:
         target = destination.with_suffix(extension)
         target.write_bytes(body)
         return target
-    except (OSError, ValueError, requests.RequestException) as exc:
+    except (
+        OSError,
+        ValueError,
+        requests.RequestException,
+        Image.DecompressionBombError,
+    ) as exc:
         logger.debug(
             "Skipping invalid dynamic visual candidate: %s", type(exc).__name__
         )
