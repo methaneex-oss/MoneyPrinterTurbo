@@ -125,7 +125,6 @@ class TestTaskService(unittest.TestCase):
         self.assertIn("Do not invent prices, plan limits, features, or sources", prompt)
         self.assertLessEqual(len(prompt), tm.llm.MAX_SCRIPT_PROMPT_LENGTH)
 
-
     def test_generate_script_warns_against_unsourced_prices_when_evidence_is_missing(self):
         params = VideoParams(video_subject="Canva pricing", video_script="")
 
@@ -139,7 +138,6 @@ class TestTaskService(unittest.TestCase):
         prompt = generate.call_args.kwargs["video_script_prompt"]
         self.assertIn("No current operator-recorded source evidence", prompt)
         self.assertIn("Do not state exact prices, plan limits", prompt)
-
 
     def test_paid_llm_is_blocked_before_script_or_term_requests(self):
         app_config = {
@@ -219,7 +217,6 @@ class TestTaskService(unittest.TestCase):
 
         self.assertEqual(blockers, [])
 
-
     def test_solo_stack_free_only_blocks_external_music_providers(self):
         params = SimpleNamespace(bgm_type="elevenlabs", bgm_volume=0.2)
         with (
@@ -238,7 +235,6 @@ class TestTaskService(unittest.TestCase):
         ):
             self.assertIsNone(tm._solo_stack_free_bgm_error(params))
 
-
     def test_paid_video_provider_is_blocked_before_provider_request(self):
         params = SimpleNamespace(video_source="ofox")
         with (
@@ -256,7 +252,6 @@ class TestTaskService(unittest.TestCase):
         self.assertIsNone(result)
         mark_failed.assert_called_once()
         generate.assert_not_called()
-
 
     def test_solo_stack_free_only_allows_openrouter_free_or_local_ollama(self):
         with patch.dict(
@@ -312,7 +307,6 @@ class TestTaskService(unittest.TestCase):
                 )
             )
 
-
     def test_unlicensed_local_animatediff_is_blocked_without_explicit_opt_in(self):
         params = SimpleNamespace(video_source="animatediff")
         with (
@@ -328,7 +322,6 @@ class TestTaskService(unittest.TestCase):
         mark_failed.assert_called_once()
         generate.assert_not_called()
 
-
     def test_solo_stack_quality_gate_blocks_critical_audio_and_aspect_flags(self):
         report = {
             "flags": [
@@ -342,7 +335,6 @@ class TestTaskService(unittest.TestCase):
             ["missing_audio", "unexpected_aspect_ratio"],
         )
         self.assertEqual(tm._solo_stack_quality_blockers({"flags": []}), [])
-
 
     def test_save_script_data_includes_solo_stack_editorial_review(self):
         params = VideoParams(video_subject="ChatGPT meeting notes for freelancers")
@@ -383,7 +375,6 @@ class TestTaskService(unittest.TestCase):
             "not_independently_verified",
         )
         self.assertEqual(payload["solo_stack_evidence"], evidence)
-
 
     def test_generate_final_videos_forwards_clip_speed_and_fit_mode(self):
         """任务编排层必须把画面速度和适配模式传给视频合成服务。"""
@@ -449,7 +440,6 @@ class TestTaskService(unittest.TestCase):
             {"stock.mp4": "freelance workflow"},
         )
         self.assertEqual(result, {"stock.mp4": "freelance workflow"})
-
 
     def test_semantic_footage_check_only_inspects_selected_sources(self):
         """Semantic QA must inspect compositor-selected clips, not unused candidates."""
