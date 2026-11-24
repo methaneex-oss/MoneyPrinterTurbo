@@ -502,8 +502,8 @@ def _choose_overlay_position(
             max(12, width - overlay_w - int(width * 0.035)),
             max(12, int(height * 0.045)),
         )
-    # The candidate insertion order preserves the familiar upper-right
-    # placement only when the sampled composition offers no better alternative.
+    # On visually uniform footage, tie-break toward the upper-right for a
+    # stable fallback; otherwise the lowest-complexity scene region wins.
     return min(
         combined,
         key=lambda position: (
