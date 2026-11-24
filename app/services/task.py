@@ -1359,6 +1359,37 @@ def _solo_stack_quality_blockers(quality_report: dict) -> list[str]:
     return sorted(set(quality_report.get("flags") or []) & critical_flags)
 
 
+def _solo_stack_product_visual_blockers(task_id: str) -> list[str]:
+    """Block publication when a named product has no authentic visual source."""
+    task_dir = Path(utils.task_dir(task_id))
+    script_path = task_dir / "script.json"
+    manifest_path = task_dir / "solo_stack" / "product_visuals" / "manifest.json"
+    coverage = None
+    try:
+        payload = json.loads(script_path.read_text(encoding="utf-8"))
+        coverage = payload.get("product_visual_coverage")
+    except (OSError, ValueError, TypeError):
+        pass
+    if not isinstance(coverage, list) and manifest_path.is_file():
+        try:
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            coverage = manifest.get("product_coverage")
+        except (OSError, ValueError, TypeError):
+            return ["product_visual_coverage_unavailable"]
+    if not isinstance(coverage, list):
+        return []
+    missing = [
+        str(item.get("product") or "unnamed product")
+        for item in coverage
+        if isinstance(item, dict)
+        and (
+            item.get("status") == "missing"
+            or int(item.get("visual_count") or 0) <= 0
+        )
+    ]
+    return [f"missing_product_visuals:{', '.join(missing)}"] if missing else []
+
+
 def generate_final_videos(
     task_id, params, downloaded_videos, audio_file, subtitle_path, audio_duration,
     *, partial_results: dict | None = None,
@@ -1670,6 +1701,8 @@ def generate_final_videos(
                 _solo_stack_quality_blockers(quality_report)
                 if solo_stack_mode else []
             )
+            if solo_stack_mode:
+                blockers.extend(_solo_stack_product_visual_blockers(task_id))
             if blockers:
                 raise RuntimeError(
                     "Solo Stack final render failed its technical release gate: "
