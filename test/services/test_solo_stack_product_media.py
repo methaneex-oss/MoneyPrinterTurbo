@@ -75,3 +75,23 @@ def test_product_visuals_are_distributed_through_existing_timeline():
 def test_timeline_is_unchanged_when_no_product_visuals_exist():
     clips = ["stock-1.mp4", "stock-2.mp4"]
     assert interleave_product_visuals(clips, []) == clips
+
+
+
+def test_scene_performance_varies_neutral_beats_without_changing_episode_wardrobe():
+    from app.services.solo_stack_director import plan_scene_performance
+
+    base = {"emotion": "skeptical", "wardrobe": "smart", "intensity": 0.8}
+    first = plan_scene_performance("Canva", 0, base)
+    second = plan_scene_performance("Canva", 1, base)
+    assert first["action"] != second["action"]
+    assert first["wardrobe"] == second["wardrobe"] == "smart"
+    assert first["intensity"] == second["intensity"] == 0.8
+
+
+def test_scene_performance_uses_semantic_cues_when_present():
+    from app.services.solo_stack_director import plan_scene_performance
+
+    result = plan_scene_performance("Hidden pricing and expensive plan", 2, {})
+    assert result["emotion"] == "skeptical"
+    assert result["action"] == "lean"
