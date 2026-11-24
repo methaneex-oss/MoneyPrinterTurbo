@@ -392,8 +392,10 @@ def _solo_stack_evidence_records(subject: str, script: str = "") -> list[dict]:
 
 
 def _solo_stack_free_only_enabled() -> bool:
-    return bool(config.app.get("solo_stack_mode", False)) and bool(
-        config.app.get("solo_stack_free_only", True)
+    return bool(
+        config.app.get(
+            "solo_stack_free_only", config.app.get("solo_stack_mode", False)
+        )
     )
 
 
