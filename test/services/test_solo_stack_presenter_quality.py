@@ -150,5 +150,10 @@ def test_presenter_auto_placement_is_deterministic_for_uniform_scenes():
 
     frame = np.full((640, 360, 3), 112, dtype=np.uint8)
     scores = _overlay_position_scores(frame, (110, 180))
-    selected = min(scores, key=lambda position: (scores[position], position[1], -position[0]))
+    selected = min(
+        scores,
+        key=lambda position: (
+            scores[position], position[1], -position[0]
+        ),
+    )
     assert selected == (360 - 110 - max(12, int(360 * 0.035)), max(8, int(640 * 0.04)))
