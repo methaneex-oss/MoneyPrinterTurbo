@@ -156,6 +156,9 @@ Search is bounded to three script-derived scenes per episode; Pixabay responses
 are cached for 24 hours and downloads are restricted to the provider's image
 hosts. Search failure degrades to the existing stock-footage path rather than
 silently fabricating a product image.
+The Colab Solo Stack preset enables this feature through
+`app.solo_stack_dynamic_visuals_enabled`; it remains off by default in other
+installations unless explicitly enabled in `config.toml`.
 
 Pixabay's API documentation requires 24-hour response caching and prohibits
 permanent hotlinking; it also requests source attribution in search-result
