@@ -177,6 +177,11 @@ _PRODUCT_GENERIC_NAMES = {
     "AI", "API", "CEO", "DIY", "FAQ", "I", "PDF", "SEO", "UI", "UX", "URL",
     "USA", "YouTube",
 }
+_SCRIPT_SENTENCE_START_STOPWORDS = {
+    "a", "an", "and", "but", "for", "here", "how", "if", "it", "now", "our",
+    "so", "the", "their", "they", "this", "today", "we", "what", "when",
+    "where", "which", "who", "why", "you", "your",
+}
 
 
 def _clean_product_label(value: str) -> str:
@@ -241,7 +246,9 @@ def _script_named_product_candidates(text: str) -> list[str]:
                 if not label or label.upper() in _PRODUCT_GENERIC_NAMES:
                     continue
                 if match.start() == 0:
-                    continue
+                    first_word = label.split()[0].casefold()
+                    if first_word in _SCRIPT_SENTENCE_START_STOPWORDS:
+                        continue
                 candidates.append((sentence_match.start() + match.start(), label))
     candidates.sort(key=lambda item: item[0])
     return list(dict.fromkeys(label for _, label in candidates))
