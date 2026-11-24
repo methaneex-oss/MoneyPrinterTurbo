@@ -470,7 +470,9 @@ def _safe_image_extension(url: str, content_type: str) -> str | None:
     }.get(content_type.split(";", 1)[0].strip().lower())
 
 
-def _download_page_images(page, destination: Path) -> list[tuple[Path, str]]:
+def _download_page_images(
+    page, destination: Path, allowed_domain: str
+) -> list[tuple[Path, str]]:
     candidates = page.locator("img").evaluate_all(
         """els => els.map((img, index) => ({
           src: img.currentSrc || img.src || '',
@@ -499,7 +501,16 @@ def _download_page_images(page, destination: Path) -> list[tuple[Path, str]]:
         if item["src"].startswith("https://")
         and item["width"] >= 320 and item["height"] >= 160
         and _safe_image_extension(item["src"], "image/png") is not None
-        and (_IMAGE_HINTS.search(item["alt"]) or _IMAGE_HINTS.search(urlparse(item["src"]).path))
+        and (
+            _IMAGE_HINTS.search(item["alt"])
+            or _IMAGE_HINTS.search(urlparse(item["src"]).path)
+        )
+        and (
+            urlparse(item["src"]).hostname == allowed_domain
+            or (
+                urlparse(item["src"]).hostname or ""
+            ).endswith("." + allowed_domain)
+        )
     ]
     candidates.sort(
         key=lambda item: (
@@ -868,7 +879,9 @@ def prepare_episode_product_visuals(
                                     )
                                     continue
 
-                            images = _download_page_images(page, product_dir)[:remaining]
+                            images = _download_page_images(
+                                page, product_dir, spec["domain"]
+                            )[:remaining]
                             if not images:
                                 screenshot = product_dir / "official-product-page.png"
                                 page.screenshot(path=str(screenshot), full_page=False)
