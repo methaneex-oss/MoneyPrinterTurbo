@@ -113,14 +113,24 @@ def register_asset(
     size = source.stat().st_size
     if size <= 0 or size > MAX_ASSET_BYTES:
         raise SoloStackAssetError("Asset must be between 1 byte and 100 MiB.")
-    if suffix in {".png", ".jpg", ".jpeg", ".webp"}:
+    image_suffixes = {".png", ".jpg", ".jpeg", ".webp"}
+    video_suffixes = {".mp4", ".mov", ".webm"}
+    if suffix in image_suffixes:
+        if asset_type not in {"screenshot", "logo"}:
+            raise SoloStackAssetError(
+                "Image files must be registered as screenshot or logo assets."
+            )
         try:
             from PIL import Image
             with Image.open(source) as image:
                 image.verify()
         except Exception as exc:
             raise SoloStackAssetError("Image asset is not a valid decodable image.") from exc
-    else:
+    elif suffix in video_suffixes:
+        if asset_type not in {"screen_recording", "demo_media"}:
+            raise SoloStackAssetError(
+                "Video files must be registered as screen_recording or demo_media assets."
+            )
         with source.open("rb") as media:
             header = media.read(16)
         is_mp4 = suffix in {".mp4", ".mov"} and len(header) >= 8 and header[4:8] == b"ftyp"
