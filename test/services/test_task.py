@@ -141,6 +141,61 @@ class TestTaskService(unittest.TestCase):
         self.assertIn("Do not state exact prices, plan limits", prompt)
 
 
+    def test_solo_stack_free_only_allows_openrouter_free_or_local_ollama(self):
+        with patch.dict(
+            tm.config.app,
+            {
+                "llm_provider": "openrouter",
+                "openrouter_model_name": "minimax/minimax-m3:free",
+            },
+        ):
+            self.assertIsNone(tm._solo_stack_free_llm_error())
+
+        with patch.dict(
+            tm.config.app,
+            {
+                "llm_provider": "openrouter",
+                "openrouter_model_name": "openai/gpt-4o",
+            },
+        ):
+            self.assertIsNotNone(tm._solo_stack_free_llm_error())
+
+    def test_solo_stack_free_only_requires_local_image_and_kokoro_endpoints(self):
+        params = SimpleNamespace(video_source="openai_image")
+        with patch.dict(
+            tm.config.app,
+            {
+                "solo_stack_local_image_ready": True,
+                "openai_image_base_url": "http://127.0.0.1:7861/v1",
+            },
+        ):
+            self.assertIsNone(tm._solo_stack_free_video_error(params))
+
+        with patch.dict(
+            tm.config.app,
+            {
+                "solo_stack_local_image_ready": True,
+                "openai_image_base_url": "https://api.openai.com/v1",
+            },
+        ):
+            self.assertIsNotNone(tm._solo_stack_free_video_error(params))
+
+        with patch.dict(
+            tm.config.kokoro,
+            {"base_url": "http://127.0.0.1:8880/v1"},
+        ):
+            self.assertIsNone(
+                tm._solo_stack_free_voice_error(
+                    SimpleNamespace(voice_name="kokoro:am_michael")
+                )
+            )
+            self.assertIsNotNone(
+                tm._solo_stack_free_voice_error(
+                    SimpleNamespace(voice_name="fish_audio:paid-voice")
+                )
+            )
+
+
     def test_unlicensed_local_animatediff_is_blocked_without_explicit_opt_in(self):
         params = SimpleNamespace(video_source="animatediff")
         with (
