@@ -273,3 +273,67 @@ def test_identifies_claude_code_and_llama_cpp_as_distinct_official_sources():
     assert PRODUCTS["llama.cpp"]["url"] == "https://github.com/ggml-org/llama.cpp"
     assert PRODUCTS["llama.cpp"]["source_label"] == "OFFICIAL PROJECT PAGE"
     assert PRODUCTS["llama.cpp"]["asset_type"] == "official_project_page_capture"
+
+
+def test_identifies_unlisted_business_apps_from_comparison_title():
+    assert identify_products(
+        "Wave vs Zoho Invoice for freelancers",
+        "Would you trust Wave to send your invoices? Zoho Invoice offers "
+        "another way to manage client billing.",
+        limit=2,
+    ) == ["Wave", "Zoho Invoice"]
+
+
+def test_identifies_unlisted_apps_from_category_episode_script():
+    assert identify_products(
+        "Best invoicing software for freelancers",
+        "Would you trust Wave to send your invoices? Zoho Invoice can help "
+        "small businesses manage billing.",
+        limit=2,
+    ) == ["Wave", "Zoho Invoice"]
+
+
+def test_discovers_official_site_from_wikidata_without_a_product_catalogue_entry(
+    monkeypatch,
+):
+    from app.services import solo_stack_product_media
+
+    class FakeResponse:
+        def __init__(self, payload):
+            self.payload = payload
+
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return self.payload
+
+    responses = [
+        FakeResponse({
+            "search": [{"id": "Q123", "label": "FreshBooks"}]
+        }),
+        FakeResponse({
+            "entities": {
+                "Q123": {
+                    "claims": {
+                        "P856": [{
+                            "mainsnak": {
+                                "datavalue": {
+                                    "value": "https://www.freshbooks.com/"
+                                }
+                            }
+                        }]
+                    }
+                }
+            }
+        }),
+    ]
+
+    def fake_get(*_args, **_kwargs):
+        return responses.pop(0)
+
+    monkeypatch.setattr(solo_stack_product_media.requests, "get", fake_get)
+    source = solo_stack_product_media.discover_official_product_source("FreshBooks")
+    assert source["url"] == "https://www.freshbooks.com/"
+    assert source["domain"] == "www.freshbooks.com"
+    assert source["discovery_method"] == "wikidata_official_website_property"
