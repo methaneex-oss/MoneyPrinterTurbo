@@ -196,9 +196,12 @@ def identify_products(subject: str, script: str, terms=None, limit: int = 3) -> 
             and end <= other_end
             for other_start, other_end, other_name in selected_spans
         )
-        if contained or name in selected:
+        if contained:
             continue
-        selected.append(name)
+        if name not in selected:
+            selected.append(name)
+        # Retain every matched span, including later mentions of a product
+        # already selected, so nested broad aliases stay suppressed as well.
         selected_spans.append((start, end, name))
     return selected[:max(0, min(5, limit))]
 
