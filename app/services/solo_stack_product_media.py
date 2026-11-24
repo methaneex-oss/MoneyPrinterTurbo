@@ -757,6 +757,17 @@ def prepare_episode_product_visuals(
         product for product in products
         if user_capture_counts.get(product, 0) < _MAX_IMAGES_PER_PRODUCT
     ]
+    # Resolve each named product at runtime. The curated catalogue is only a
+    # compatibility fallback for products absent from public entity indexes.
+    source_specs = {}
+    for product in products_needing_public_visuals:
+        source_specs[product] = discover_official_product_source(product)
+        if not source_specs[product]:
+            source_specs[product] = PRODUCTS.get(product)
+        if not source_specs[product]:
+            logger.warning(
+                "No trustworthy official public source discovered for %s", product
+            )
     sync_playwright = None
     if products_needing_public_visuals:
         try:
@@ -786,7 +797,9 @@ def prepare_episode_product_visuals(
                         if remaining <= 0:
                             continue
                         try:
-                            spec = PRODUCTS[product]
+                            spec = source_specs.get(product)
+                            if not spec:
+                                continue
                             product_dir = media_dir / re.sub(
                                 r"[^a-z0-9]+", "-", product.casefold()
                             ).strip("-")
@@ -848,9 +861,13 @@ def prepare_episode_product_visuals(
                                     "source_asset_url": image_url,
                                     "sha256": digest,
                                     "captured_at": manifest["captured_at"],
+                                    "source_discovery_method": spec.get(
+                                        "discovery_method", "curated_official_source_fallback"
+                                    ),
                                     "note": (
                                         "Public official-site visual; not an authenticated "
-                                        "in-app task recording."
+                                        "in-app task recording. Official source resolution "
+                                        "was performed dynamically for this episode."
                                     ),
                                 })
                                 clips.append(str(clip))
