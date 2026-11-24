@@ -195,6 +195,31 @@ class TestTaskService(unittest.TestCase):
         mark_failed.assert_called_once()
         tts.assert_not_called()
 
+    def test_missing_product_visuals_block_solo_stack_release(self):
+        with tempfile.TemporaryDirectory() as directory:
+            Path(directory, "script.json").write_text(
+                '{"product_visual_coverage":['
+                '{"product":"ChatGPT","visual_count":0,"status":"missing"}]}',
+                encoding="utf-8",
+            )
+            with patch.object(tm.utils, "task_dir", return_value=directory):
+                blockers = tm._solo_stack_product_visual_blockers("visual-task")
+
+        self.assertEqual(blockers, ["missing_product_visuals:ChatGPT"])
+
+    def test_available_product_visuals_do_not_block_solo_stack_release(self):
+        with tempfile.TemporaryDirectory() as directory:
+            Path(directory, "script.json").write_text(
+                '{"product_visual_coverage":['
+                '{"product":"ChatGPT","visual_count":2,"status":"available"}]}',
+                encoding="utf-8",
+            )
+            with patch.object(tm.utils, "task_dir", return_value=directory):
+                blockers = tm._solo_stack_product_visual_blockers("visual-task")
+
+        self.assertEqual(blockers, [])
+
+
     def test_solo_stack_free_only_blocks_external_music_providers(self):
         params = SimpleNamespace(bgm_type="elevenlabs", bgm_volume=0.2)
         with (
