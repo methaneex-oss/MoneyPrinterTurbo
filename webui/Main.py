@@ -3582,6 +3582,16 @@ def _render_general_settings(settings):
         settings = dict(settings)
         settings["llm_provider"] = "openrouter"
         _set_runtime_config("app", "llm_provider", "openrouter")
+    if free_only and settings.get("llm_provider") == "openrouter":
+        openrouter = get_llm_provider("openrouter")
+        model_key = openrouter.config_key("model_name")
+        effective_model = openrouter.resolve_model_name(
+            str(settings.get(model_key) or "")
+        )
+        if not effective_model.lower().endswith(":free"):
+            settings = dict(settings)
+            settings[model_key] = openrouter.default_model
+            _set_runtime_config("app", model_key, openrouter.default_model)
     configured = _general_provider_readiness(settings)
     if free_only:
         st.caption(
