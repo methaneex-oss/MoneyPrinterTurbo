@@ -1896,6 +1896,33 @@ class TestMaterialTlsVerification(unittest.TestCase):
         self.assertTrue(warning.called)
 
 
+class TestSoloStackImagePrompt(unittest.TestCase):
+    def test_solo_stack_broll_prompt_forbids_fake_product_interfaces(self):
+        with patch.dict(
+            config.app,
+            {
+                "solo_stack_mode": True,
+                "openai_image_prompt_template": "Cinematic editorial photo of {term}",
+            },
+        ):
+            prompt = material._openai_image_prompt("ChatGPT workflow")
+
+        self.assertIn("Cinematic editorial photo of ChatGPT workflow", prompt)
+        self.assertIn("Do not create product interfaces", prompt)
+        self.assertIn("fake product screens", prompt)
+        self.assertIn("verified operator captures", prompt)
+
+    def test_non_solo_stack_image_prompt_keeps_existing_behavior(self):
+        with patch.dict(
+            config.app,
+            {"solo_stack_mode": False, "openai_image_prompt_template": ""},
+        ):
+            self.assertEqual(
+                material._openai_image_prompt("generic editorial scene"),
+                "generic editorial scene",
+            )
+
+
 class TestCoverrProvider(unittest.TestCase):
     """
     Coverr 视频素材源(spec: 2026-06-09-coverr-video-provider-design.md)。
