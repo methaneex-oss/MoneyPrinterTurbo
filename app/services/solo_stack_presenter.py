@@ -402,7 +402,9 @@ def build_presenter_frame(
 
 
 
-def _overlay_position_scores(frame, overlay_size: tuple[int, int]) -> dict[tuple[int, int], float]:
+def _overlay_position_scores(
+    frame, overlay_size: tuple[int, int]
+) -> dict[tuple[int, int], float]:
     """Score safe presenter zones by sampled visual complexity in the source frame.
 
     The lower subtitle band is intentionally excluded. A stable candidate order
@@ -444,23 +446,38 @@ def _overlay_position_scores(frame, overlay_size: tuple[int, int]) -> dict[tuple
                 continue
             # Downsample before scoring: this is a placement heuristic, not
             # object recognition, and should add negligible render overhead.
-            ys = np.linspace(0, patch.shape[0] - 1, min(20, patch.shape[0])).astype(int)
-            xs = np.linspace(0, patch.shape[1] - 1, min(20, patch.shape[1])).astype(int)
+            ys = np.linspace(
+                0, patch.shape[0] - 1, min(20, patch.shape[0])
+            ).astype(int)
+            xs = np.linspace(
+                0, patch.shape[1] - 1, min(20, patch.shape[1])
+            ).astype(int)
             small = patch[ys][:, xs].astype(np.float32)
-            gray = small[..., 0] * 0.299 + small[..., 1] * 0.587 + small[..., 2] * 0.114
+            gray = (
+                small[..., 0] * 0.299
+                + small[..., 1] * 0.587
+                + small[..., 2] * 0.114
+            )
             texture = float(gray.std())
             edges = float(
                 (np.abs(np.diff(gray, axis=0)).mean() if gray.shape[0] > 1 else 0)
                 + (np.abs(np.diff(gray, axis=1)).mean() if gray.shape[1] > 1 else 0)
             )
             luminance = float(gray.mean())
-            exposure_penalty = max(0.0, 24.0 - luminance) + max(0.0, luminance - 232.0)
-            scores[(x, y)] = texture * 0.55 + edges * 0.9 + exposure_penalty * 0.25
+            exposure_penalty = (
+                max(0.0, 24.0 - luminance)
+                + max(0.0, luminance - 232.0)
+            )
+            scores[(x, y)] = (
+                texture * 0.55 + edges * 0.9 + exposure_penalty * 0.25
+            )
     return scores
 
 
-def _choose_overlay_position(clip, overlay_size: tuple[int, int]) -> tuple[int, int]:
-    """Choose a low-obstruction upper/middle zone from several actual clip frames."""
+def _choose_overlay_position(
+    clip, overlay_size: tuple[int, int]
+) -> tuple[int, int]:
+    """Choose a low-obstruction zone from several actual clip frames."""
     import numpy as np
 
     duration = max(0.0, float(getattr(clip, "duration", 0.0) or 0.0))
@@ -479,10 +496,18 @@ def _choose_overlay_position(clip, overlay_size: tuple[int, int]) -> tuple[int, 
     if not combined:
         width, height = (int(value) for value in clip.size)
         overlay_w, overlay_h = overlay_size
-        return max(12, width - overlay_w - int(width * 0.035)), max(12, int(height * 0.045))
+        return (
+            max(12, width - overlay_w - int(width * 0.035)),
+            max(12, int(height * 0.045)),
+        )
     # The candidate insertion order preserves the familiar upper-right
     # placement only when the sampled composition offers no better alternative.
-    return min(combined, key=lambda position: (combined[position], position[1], -position[0]))
+    return min(
+        combined,
+        key=lambda position: (
+            combined[position], position[1], -position[0]
+        ),
+    )
 
 
 def add_presenter_overlay(
