@@ -43,6 +43,24 @@ def test_asset_registration_copies_and_hash_verifies(tmp_path):
     assert (project / "assets" / "chatgpt-home.png").read_bytes() == source.read_bytes()
 
 
+def test_asset_registration_rejects_media_type_mismatch(tmp_path):
+    image = tmp_path / "capture.png"
+    Image.new("RGB", (4, 4)).save(image)
+    with pytest.raises(SoloStackAssetError, match="Image files"):
+        register_asset(
+            image, tmp_path / "episode", asset_id="bad-image",
+            product="ChatGPT", asset_type="screen_recording",
+        )
+
+    video = tmp_path / "capture.mp4"
+    video.write_bytes(b"\\x00\\x00\\x00\\x18ftypisom0000")
+    with pytest.raises(SoloStackAssetError, match="Video files"):
+        register_asset(
+            video, tmp_path / "episode", asset_id="bad-video",
+            product="ChatGPT", asset_type="screenshot",
+        )
+
+
 def test_asset_registration_rejects_symlink_and_oversized_file(tmp_path):
     source = tmp_path / "real.png"
     Image.new("RGB", (2, 2)).save(source)
