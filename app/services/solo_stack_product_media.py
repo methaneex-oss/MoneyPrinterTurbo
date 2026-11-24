@@ -358,7 +358,7 @@ def _official_source_from_wikidata(product: str) -> dict | None:
                 if parsed.scheme == "https" and parsed.hostname:
                     return {
                         "url": value,
-                        "domain": parsed.hostname.casefold(),
+                        "domain": parsed.hostname.casefold().removeprefix("www."),
                         "discovery_method": "wikidata_official_website_property",
                         "entity_label": label,
                     }
@@ -402,7 +402,7 @@ def _official_source_from_search(product: str) -> dict | None:
             continue
         return {
             "url": href,
-            "domain": host,
+            "domain": host.removeprefix("www."),
             "discovery_method": "duckduckgo_result_candidate",
             "entity_label": product,
         }
@@ -826,6 +826,29 @@ def prepare_episode_product_visuals(
                                     source_page,
                                 )
                                 continue
+
+                            if spec.get("discovery_method") == "duckduckgo_result_candidate":
+                                page_identity = (
+                                    page.title() + " " +
+                                    str(page.locator("meta[name='description']").get_attribute("content") or "")
+                                ).casefold()
+                                product_tokens = [
+                                    token.casefold()
+                                    for token in re.findall(r"[a-z0-9]+", product)
+                                    if len(token) > 1
+                                ]
+                                identity_matches = sum(
+                                    1 for token in product_tokens
+                                    if token in page_identity
+                                )
+                                if product_tokens and (
+                                    identity_matches / len(product_tokens) < 0.5
+                                ):
+                                    logger.warning(
+                                        "Search candidate page identity did not match %s",
+                                        product,
+                                    )
+                                    continue
 
                             images = _download_page_images(page, product_dir)[:remaining]
                             if not images:
