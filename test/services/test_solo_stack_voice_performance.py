@@ -63,3 +63,39 @@ def test_presenter_mouth_shape_changes_with_audio_activity():
 
     difference = ImageChops.difference(closed, open_mouth)
     assert difference.getbbox() is not None
+
+
+
+def test_kokoro_tts_sends_ssml_but_keeps_plain_subtitle_text(monkeypatch, tmp_path):
+    from app.services import voice
+
+    original_text = "Explain the workflow. But check the hidden limits."
+    captured = {}
+    sentinel = object()
+
+    monkeypatch.setitem(
+        voice.config.kokoro, "base_url", "http://127.0.0.1:8880/v1"
+    )
+    monkeypatch.setitem(
+        voice.config.kokoro, "solo_stack_performance_enabled", True
+    )
+
+    def fake_transport(*args, **kwargs):
+        captured["args"] = args
+        captured["kwargs"] = kwargs
+        return sentinel
+
+    monkeypatch.setattr(voice, "_openai_compatible_tts", fake_transport)
+    result = voice.kokoro_tts(
+        text=original_text,
+        voice="am_michael",
+        voice_file=str(tmp_path / "voice.mp3"),
+        performance_direction={"emotion": "explaining"},
+    )
+
+    assert result is sentinel
+    assert captured["args"][5].startswith("<speak>")
+    assert captured["kwargs"]["extra_payload"] == {
+        "ssml": True, "allow_voice_tags": True
+    }
+    assert captured["kwargs"]["subtitle_text"] == original_text
