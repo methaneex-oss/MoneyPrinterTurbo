@@ -32,6 +32,9 @@ The new `app.services.solo_stack_assets` service:
 - Supports official product-page evidence and real user-captured application
   screenshots/recordings. It does not scrape authenticated apps or pretend
   generated mockups are real product screenshots.
+- During Solo Stack task generation, matching, hash-verified captures are selected
+  by product name and prioritized over public product-page visuals; those public
+  visuals fill remaining slots when available.
 
 ## Suggested asset capture workflow
 1. Open the actual product website/app and capture the interface or the real task
