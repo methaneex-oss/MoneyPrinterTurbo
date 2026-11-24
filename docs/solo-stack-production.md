@@ -134,3 +134,30 @@ Missing, unreadable, or malformed coverage records fail closed when a supported
 product is named. Episodes that name no supported product do not require
 product-specific footage. Official-page captures are labelled as public
 vendor-site visuals, not authenticated in-app recordings.
+
+
+## Topic-aware supporting visual retrieval
+
+Solo Stack now builds a small set of ordered visual queries from the episode
+script and material terms, then searches free Pixabay still images (when a
+Pixabay key is configured) and Wikimedia Commons. Results are cached locally,
+downloaded rather than permanently hotlinked, validated as actual image files,
+and ranked using query-to-title/tag overlap. The renderer turns selected stills
+into short motion clips and records provider, source page, creator, licence,
+attribution, dimensions, and SHA-256 in
+`solo_stack/dynamic_visuals/manifest.json`.
+
+These are **supporting visuals**, not proof of a product's actual interface.
+They are explicitly marked `is_product_evidence: false` and cannot satisfy
+the product-visual release gate. A generic laptop image must never be presented
+as a Claude Code screen or a llama.cpp run. Authentic product demonstrations
+still require verified operator captures or trustworthy official-source captures.
+Search is bounded to three script-derived scenes per episode; Pixabay responses
+are cached for 24 hours and downloads are restricted to the provider's image
+hosts. Search failure degrades to the existing stock-footage path rather than
+silently fabricating a product image.
+
+Pixabay's API documentation requires 24-hour response caching and prohibits
+permanent hotlinking; it also requests source attribution in search-result
+surfaces. The implementation downloads the selected asset and preserves
+attribution metadata for editorial use.
