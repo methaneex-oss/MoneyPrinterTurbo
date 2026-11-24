@@ -2741,6 +2741,7 @@ def _openai_compatible_tts(
     voice_rate: float,
     voice_file: str,
     extra_payload: dict | None = None,
+    subtitle_text: str | None = None,
 ) -> Union[SubMaker, None]:
     """Shared transport for self-hosted, OpenAI-compatible ``/audio/speech``
     servers (Chatterbox, Kokoro, ...).
@@ -2818,7 +2819,7 @@ def _openai_compatible_tts(
             logger.success(f"{provider} tts succeeded: {voice_file}")
             return populate_legacy_submaker_with_full_text(
                 sub_maker=sub_maker,
-                text=text,
+                text=subtitle_text if subtitle_text is not None else text,
                 audio_duration_seconds=audio_duration,
             )
         except requests.exceptions.ConnectTimeout:
@@ -2937,6 +2938,7 @@ def kokoro_tts(
     api_key = config.kokoro.get("api_key", "")
     if not model_id:
         model_id = config.kokoro.get("model_id", "kokoro") or "kokoro"
+    subtitle_text = text
     extra_payload = None
     if (
         isinstance(performance_direction, dict)
@@ -2949,6 +2951,7 @@ def kokoro_tts(
     return _openai_compatible_tts(
         "kokoro", base_url, api_key, model_id, voice, text, voice_rate, voice_file,
         extra_payload=extra_payload,
+        subtitle_text=subtitle_text,
     )
 
 
