@@ -1370,6 +1370,13 @@ def _solo_stack_product_visual_blockers(task_id: str) -> list[str]:
         coverage = payload.get("product_visual_coverage")
     except (OSError, ValueError, TypeError):
         pass
+    capture_error = (
+        payload.get("product_visual_capture_error")
+        if "payload" in locals() and isinstance(payload, dict)
+        else None
+    )
+    if capture_error:
+        return ["product_visual_capture_unavailable"]
     if not isinstance(coverage, list) and manifest_path.is_file():
         try:
             manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
@@ -2432,8 +2439,7 @@ def _run_pipeline(
     )
     # Solo Stack supplements stock footage with real public product visuals
     # from official vendor pages when the episode explicitly names a supported app.
-    # This is a no-cost capture path; any browser/network failure leaves the
-    # existing media workflow intact.
+    # A missing or failed product capture is recorded for the final release gate.
     if bool(config.app.get("solo_stack_mode", False)):
         try:
             product_visual_clips = solo_stack_product_media.prepare_episode_product_visuals(
@@ -2454,9 +2460,18 @@ def _run_pipeline(
                     "added {} official Solo Stack product visual clips".format(len(product_visual_clips)),
                 )
         except Exception as exc:
+            try:
+                task_artifacts.patch_script_data(
+                    task_id,
+                    {"product_visual_capture_error": str(exc)[:400]},
+                )
+            except Exception:
+                logger.exception(
+                    "could not persist Solo Stack product-visual capture failure"
+                )
             logger.warning(
-                "official Solo Stack product visual capture skipped; "
-                "continuing with existing media: {}".format(exc),
+                "Solo Stack product visual capture failed; final release gate "
+                "will reject uncovered named products: {}".format(exc),
             )
 
     if not downloaded_videos:
