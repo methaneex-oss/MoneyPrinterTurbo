@@ -163,7 +163,7 @@ attribution, dimensions, and SHA-256 in
 These are **supporting visuals**, not proof of a product's actual interface.
 They are explicitly marked `is_product_evidence: false` and cannot satisfy
 the product-visual release gate. A generic laptop image must never be presented
-as a Claude Code screen or a llama.cpp run. Authentic product demonstrations
+as a demonstration of any named product. Authentic product demonstrations
 still require verified operator captures or trustworthy official-source captures.
 Search is bounded to three script-derived scenes per episode; Pixabay responses
 are cached for 24 hours and downloads are restricted to the provider's image
@@ -175,9 +175,7 @@ design tools, CRMs, schedulers, automation products and other named software
 are resolved per episode. Specific examples in tests or historical manifests
 are fixtures, not a closed product list. If the resolver cannot establish a
 credible official source, the product remains visibly uncovered and the task
-fails closed rather than inventing an app screenshot.can still receive topic-relevant supporting imagery, but authentic app-specific
-evidence requires an official source that can be safely verified or a real
-operator capture.
+fails closed rather than inventing an app screenshot.
 The Colab Solo Stack preset enables this feature through
 `app.solo_stack_dynamic_visuals_enabled`; it remains off by default in other
 installations unless explicitly enabled in `config.toml`.
