@@ -210,6 +210,8 @@ def add_presenter_overlay(
     expression: str = "talk",
     corner: str = "right",
     acting_direction: dict | None = None,
+    max_duration: float = 3.5,
+    duration_fraction: float = 0.46,
 ):
     """Composite Stack with episode-specific acting over an opening clip."""
     import numpy as np
@@ -234,13 +236,19 @@ def add_presenter_overlay(
         intensity = 0.85
 
     width, height = (int(value) for value in clip.size)
-    if width < 360 or height < 360 or float(clip.duration or 0) < 0.6:
+    clip_duration = float(clip.duration or 0)
+    if width < 360 or height < 360 or clip_duration < 1.5:
         return clip
-    target_h = min(int(height * 0.38), 420)
+    try:
+        fraction = _clamp(float(duration_fraction), 0.2, 0.8)
+        cap = max(0.8, min(float(max_duration), 8.0))
+    except (TypeError, ValueError):
+        fraction, cap = 0.46, 3.5
+    target_h = min(int(height * 0.34), 380)
     target_w = int(target_h * 480 / 560)
     x = max(12, width - target_w - int(width * 0.035)) if corner == "right" else int(width * 0.035)
     y = max(12, height - target_h - int(height * 0.035))
-    duration = min(float(clip.duration), 12.0)
+    duration = min(clip_duration * fraction, cap)
 
     def frame(t):
         return np.asarray(build_presenter_frame(
