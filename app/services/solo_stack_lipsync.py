@@ -32,8 +32,12 @@ def build_audio_activity_envelope(audio_path: str, frame_rate: int = 25) -> list
         return [0.0] * len(values)
     floor = max(0.008, reference * 0.07)
     normalized = np.clip((envelope - floor) / max(reference * 0.72, 1e-5), 0.0, 1.0)
-    if normalized.size >= 3:
-        normalized[1:-1] = (
-            normalized[:-2] * 0.25 + normalized[1:-1] * 0.5 + normalized[2:] * 0.25
-        )
-    return [round(float(value), 3) for value in normalized]
+    # Causal attack/release smoothing avoids moving mouth activity backward
+    # into a preceding silence while preventing frame-to-frame jitter.
+    smoothed = np.empty_like(normalized)
+    previous = 0.0
+    for index, value in enumerate(normalized):
+        coefficient = 0.65 if value > previous else 0.35
+        previous = coefficient * float(value) + (1.0 - coefficient) * previous
+        smoothed[index] = previous
+    return [round(float(value), 3) for value in smoothed]
