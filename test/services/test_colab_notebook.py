@@ -21,6 +21,7 @@ def test_colab_notebook_tracks_active_branch_and_persists_task_state():
     assert "app['enable_redis'] = False" in config_cell
     assert "app['solo_stack_mode'] = True" in config_cell
     assert "app['solo_stack_free_only'] = True" in config_cell
+    assert "app['solo_stack_dynamic_visuals_enabled'] = True" in config_cell
 
 def test_colab_task_migration_merges_and_verifies_before_removing_local_data():
     notebook_path = Path(__file__).resolve().parents[2] / "docs" / "MoneyPrinterTurbo.ipynb"
