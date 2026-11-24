@@ -37,13 +37,18 @@ _STOP = {
 
 def _tokens(value: str) -> list[str]:
     return [
-        token for token in re.findall(r"[a-z0-9][a-z0-9.+#_-]*", str(value or "").casefold())
+        token
+        for token in re.findall(
+            r"[a-z0-9][a-z0-9.+#_-]*", str(value or "").casefold()
+        )
         if len(token) > 1 and token not in _STOP
     ]
 
 
-def build_scene_queries(subject: str, script: str, terms=None, limit: int = _MAX_SCENES) -> list[str]:
-    """Create ordered, script-grounded visual queries without a fixed product catalogue."""
+def build_scene_queries(
+    subject: str, script: str, terms=None, limit: int = _MAX_SCENES
+) -> list[str]:
+    """Create ordered, script-grounded queries without a fixed product catalogue."""
     sentences = [
         re.sub(r"\s+", " ", part).strip(" -\t")
         for part in re.split(r"(?<=[.!?])\s+|\n+", str(script or ""))
@@ -76,7 +81,9 @@ def build_scene_queries(subject: str, script: str, terms=None, limit: int = _MAX
         extras = [terms] if isinstance(terms, str) else list(terms)
         for item in extras:
             candidate = str(item or "").strip()[:100]
-            if candidate and candidate.casefold() not in {q.casefold() for q in queries}:
+            if candidate and candidate.casefold() not in {
+                query.casefold() for query in queries
+            }:
                 queries.append(candidate)
             if len(queries) >= maximum:
                 break
@@ -84,7 +91,8 @@ def build_scene_queries(subject: str, script: str, terms=None, limit: int = _MAX
 
 
 def _cache_path(cache_dir: Path, query: str, provider: str) -> Path:
-    digest = hashlib.sha256((provider + ":" + query.casefold()).encode("utf-8")).hexdigest()
+    cache_key = (provider + ":" + query.casefold()).encode("utf-8")
+    digest = hashlib.sha256(cache_key).hexdigest()
     return cache_dir / f"{provider}-{digest}.json"
 
 
@@ -102,7 +110,11 @@ def _write_cache(path: Path, items: list[dict]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_suffix(".tmp")
     temporary.write_text(
-        json.dumps({"cached_at": time.time(), "items": items}, ensure_ascii=False, indent=2),
+        json.dumps(
+            {"cached_at": time.time(), "items": items},
+            ensure_ascii=False,
+            indent=2,
+        ),
         encoding="utf-8",
     )
     temporary.replace(path)
@@ -162,7 +174,9 @@ def _commons_search(query: str, cache_dir: Path) -> list[dict]:
             "gsrlimit": 12, "prop": "imageinfo", "iiprop": "url|extmetadata",
             "iiurlwidth": 1280,
         },
-        headers={"User-Agent": "SoloStackVisualResearch/1.0 (educational video production)"},
+        headers={
+            "User-Agent": "SoloStackVisualResearch/1.0 (educational video production)"
+        },
         timeout=(10, 25),
     )
     response.raise_for_status()
@@ -213,7 +227,8 @@ def _download_image(item: dict, destination: Path) -> Path | None:
         response = requests.get(str(url), stream=True, timeout=(10, 30))
         try:
             response.raise_for_status()
-            content_type = response.headers.get("content-type", "").split(";", 1)[0].lower()
+            content_type = response.headers.get("content-type", "")
+            content_type = content_type.split(";", 1)[0].lower()
             if not content_type.startswith("image/"):
                 return None
             chunks, size = [], 0
@@ -242,7 +257,9 @@ def _download_image(item: dict, destination: Path) -> Path | None:
             image.verify()
         return target
     except (OSError, ValueError, requests.RequestException) as exc:
-        logger.debug("Skipping invalid dynamic visual candidate: %s", type(exc).__name__)
+        logger.debug(
+            "Skipping invalid dynamic visual candidate: %s", type(exc).__name__
+        )
         try:
             destination.unlink(missing_ok=True)
         except OSError:
@@ -250,7 +267,9 @@ def _download_image(item: dict, destination: Path) -> Path | None:
         return None
 
 
-def _render_motion_clip(image_path: Path, output_path: Path, duration: float, aspect: str) -> None:
+def _render_motion_clip(
+    image_path: Path, output_path: Path, duration: float, aspect: str
+) -> None:
     width, height = (1080, 1920) if aspect in {"9:16", "portrait"} else (1920, 1080)
     fps = 30
     frames = max(1, int(max(2.0, min(float(duration), 6.0)) * fps))
@@ -280,7 +299,7 @@ def prepare_dynamic_scene_visuals(
     duration: float = 3.5,
     max_scenes: int = _MAX_SCENES,
 ) -> list[str]:
-    """Find and render topic-specific supporting stills; never impersonate product UI."""
+    """Find supporting stills; never count them as authenticated product-interface evidence."""
     from app.services.material import get_api_key
     from app.utils import utils
 
@@ -319,7 +338,10 @@ def prepare_dynamic_scene_visuals(
         )
         selected = None
         for candidate in candidates[:8]:
-            image_path = media_dir / f"scene-{scene_index}-{candidate.get('provider')}-{candidate.get('asset_id') or 'asset'}.img"
+            asset_name = candidate.get("asset_id") or "asset"
+            image_path = media_dir / (
+                f"scene-{scene_index}-{candidate.get('provider')}-{asset_name}.img"
+            )
             downloaded = _download_image(candidate, image_path)
             if downloaded:
                 selected = (candidate, downloaded)
@@ -335,20 +357,28 @@ def prepare_dynamic_scene_visuals(
         try:
             _render_motion_clip(image_path, clip_path, duration, aspect)
         except Exception as exc:
-            logger.warning("Could not render dynamic visual clip: %s", type(exc).__name__)
+            logger.warning(
+                "Could not render dynamic visual clip: %s", type(exc).__name__
+            )
             manifest["visuals"].append({
-                "scene_id": scene_index, "query": query, "status": "downloaded_not_rendered",
-                "source_url": candidate.get("source_url"), "license": candidate.get("license"),
+                "scene_id": scene_index,
+                "query": query,
+                "status": "downloaded_not_rendered",
+                "source_url": candidate.get("source_url"),
+                "license": candidate.get("license"),
             })
             continue
 
         record = {
             "scene_id": scene_index, "query": query, "status": "available",
-            "provider": candidate.get("provider"), "asset_id": candidate.get("asset_id"),
+            "provider": candidate.get("provider"),
+            "asset_id": candidate.get("asset_id"),
             "file": str(clip_path.relative_to(task_dir)),
             "image_file": str(image_path.relative_to(task_dir)),
-            "source_url": candidate.get("source_url"), "license": candidate.get("license"),
-            "creator": candidate.get("creator"), "attribution": candidate.get("attribution"),
+            "source_url": candidate.get("source_url"),
+            "license": candidate.get("license"),
+            "creator": candidate.get("creator"),
+            "attribution": candidate.get("attribution"),
             "sha256": hashlib.sha256(image_path.read_bytes()).hexdigest(),
             "width": candidate.get("width"), "height": candidate.get("height"),
             "is_product_evidence": False,
