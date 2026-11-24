@@ -9,6 +9,7 @@ import time
 from concurrent.futures import CancelledError, Future, ThreadPoolExecutor
 from functools import partial
 from os import path
+from urllib.parse import urlparse
 from uuid import uuid4
 
 from loguru import logger
@@ -388,6 +389,84 @@ def _solo_stack_evidence_records(subject: str, script: str = "") -> list[dict]:
             .format(exc)
         )
         return []
+
+
+def _solo_stack_free_only_enabled() -> bool:
+    return bool(config.app.get("solo_stack_mode", False)) and bool(
+        config.app.get("solo_stack_free_only", True)
+    )
+
+
+def _is_loopback_http_url(value: str) -> bool:
+    try:
+        parsed = urlparse(str(value or "").strip())
+    except ValueError:
+        return False
+    return (
+        parsed.scheme == "http"
+        and parsed.hostname in {"127.0.0.1", "localhost", "::1"}
+    )
+
+
+def _solo_stack_free_llm_error() -> str | None:
+    settings = config.snapshot_config_with_pending(config.app)
+    provider_id = str(settings.get("llm_provider") or "").strip().lower()
+    provider = llm.get_llm_provider(provider_id)
+    if provider is None:
+        return "Solo Stack free-only mode requires an approved free LLM provider."
+    model_key = provider.config_key("model_name")
+    model_name = str(settings.get(model_key) or provider.default_model or "").strip()
+    if provider_id == "openrouter" and model_name.lower().endswith(":free"):
+        return None
+    base_url_key = provider.config_key("base_url")
+    base_url = settings.get(base_url_key) or provider.default_base_url
+    if provider_id == "ollama" and _is_loopback_http_url(base_url):
+        return None
+    return (
+        "Solo Stack free-only mode allows only an OpenRouter model ending in "
+        ":free or a local Ollama endpoint. No LLM request was sent."
+    )
+
+
+def _solo_stack_free_video_error(params) -> str | None:
+    source = str(getattr(params, "video_source", "") or "").strip().lower()
+    if source in {"pixabay", "local"}:
+        return None
+    if source == "openai_image":
+        base_url = config.app.get("openai_image_base_url", "")
+        if (
+            bool(config.app.get("solo_stack_local_image_ready", False))
+            and _is_loopback_http_url(base_url)
+        ):
+            return None
+        return (
+            "Solo Stack free-only mode requires the OpenAI-compatible image source "
+            "to point to the warmed local Colab image server."
+        )
+    if source == "animatediff" and bool(
+        config.app.get("allow_unverified_animatediff", False)
+    ):
+        return None
+    return (
+        f"Solo Stack free-only mode blocks video source '{source or '<empty>'}'. "
+        "Use Pixabay, local media, or the warmed local image server."
+    )
+
+
+def _solo_stack_free_voice_error(params) -> str | None:
+    voice_name = voice.parse_voice_name(str(getattr(params, "voice_name", "") or ""))
+    if not voice.is_kokoro_voice(voice_name):
+        return (
+            "Solo Stack free-only mode requires the local Kokoro voice or a "
+            "user-supplied audio file. No external TTS request was sent."
+        )
+    base_url = config.kokoro.get("base_url", "")
+    if not _is_loopback_http_url(base_url):
+        return (
+            "Solo Stack free-only mode requires Kokoro to use a loopback-local "
+            "service URL. No external TTS request was sent."
+        )
+    return None
 
 
 def generate_script(task_id, params):
