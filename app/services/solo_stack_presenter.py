@@ -52,6 +52,7 @@ def build_presenter_frame(
     gaze: str = "camera",
     wardrobe: str = "base",
     intensity: float = 0.85,
+    mouth_open: float = 0.0,
 ) -> Image.Image:
     """Render one transparent, deterministic character frame."""
     width, height = (max(160, int(v)) for v in size)
@@ -191,6 +192,13 @@ def build_presenter_frame(
     elif mouth == "pleased":
         draw.arc((*p(210+head_x, 202+bob), *p(270+head_x, 254+bob)), 5, 175,
                  fill=ink, width=max(3, int(6*scale)))
+    elif mouth == "talk" and _clamp(mouth_open, 0.0, 1.0) > 0.12:
+        opening = _clamp(mouth_open, 0.0, 1.0)
+        mouth_height = 7 + 21 * opening
+        ellipse((224+head_x, 220+bob, 256+head_x, 220+bob+mouth_height), ink)
+        if opening > 0.55:
+            ellipse((232+head_x, 220+bob+mouth_height*0.62,
+                     248+head_x, 220+bob+mouth_height*0.88), coral)
     else:
         draw.arc((*p(211+head_x, 205+bob), *p(269+head_x, 247+bob)), 5, 175,
                  fill=ink, width=max(3, int(5*scale)))
@@ -212,8 +220,11 @@ def add_presenter_overlay(
     acting_direction: dict | None = None,
     max_duration: float = 3.5,
     duration_fraction: float = 0.46,
+    audio_activity: list[float] | None = None,
+    audio_activity_fps: int = 25,
+    audio_offset: float = 0.0,
 ):
-    """Composite Stack with episode-specific acting over an opening clip."""
+    """Composite Stack with scene-specific acting and audio-reactive mouth motion."""
     import numpy as np
     from moviepy import CompositeVideoClip, VideoClip
 
@@ -251,9 +262,14 @@ def add_presenter_overlay(
     duration = min(clip_duration * fraction, cap)
 
     def frame(t):
+        mouth_open = 0.0
+        if audio_activity and audio_activity_fps > 0:
+            activity_index = int(max(0.0, audio_offset + float(t)) * audio_activity_fps)
+            if activity_index < len(audio_activity):
+                mouth_open = audio_activity[activity_index]
         return np.asarray(build_presenter_frame(
             t, (target_w, target_h), expression, action=action, gaze=gaze,
-            wardrobe=wardrobe, intensity=intensity,
+            wardrobe=wardrobe, intensity=intensity, mouth_open=mouth_open,
         ).convert("RGB"))
 
     overlay = VideoClip(frame, duration=duration).with_position((x, y))
