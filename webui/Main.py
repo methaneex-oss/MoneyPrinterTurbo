@@ -6300,6 +6300,11 @@ def _render_video_settings(panel, params):
                     "Asset type",
                     ["screenshot", "screen_recording", "demo_media", "logo"],
                     key="solo_stack_capture_type",
+                    help=(
+                        "Logos are stored as brand references but do not satisfy "
+                        "the product-evidence gate. Use Screenshot or Screen Recording "
+                        "to prove the actual product interface."
+                    ),
                 )
                 capture_source = st.text_input(
                     "Official source page (optional)", key="solo_stack_capture_source"
