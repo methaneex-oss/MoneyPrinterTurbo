@@ -1,4 +1,5 @@
 import unittest
+from types import SimpleNamespace
 import os
 import shutil
 import sys
@@ -90,6 +91,128 @@ class TestTaskService(unittest.TestCase):
             custom_system_prompt="Only write short narration.",
         )
 
+    def test_generate_script_includes_current_operator_evidence_context(self):
+        params = VideoParams(
+            video_subject="ChatGPT meeting notes for freelancers",
+            video_script="",
+        )
+        evidence = [{
+            "product": "ChatGPT",
+            "claim": "The Free plan has a documented usage limit.",
+            "value": "Operator-recorded current value",
+            "currency": None,
+            "plan": "Free",
+            "publisher": "OpenAI",
+            "checked_at": "2026-11-24",
+            "source_url": "https://chatgpt.com/pricing/",
+            "is_current": True,
+        }]
+
+        with (
+            patch.dict(tm.config.app, {"solo_stack_mode": True}),
+            patch.object(tm, "_solo_stack_evidence_records", return_value=evidence),
+            patch.object(
+                tm.llm, "generate_script", return_value="A valid generated script."
+            ) as generate,
+        ):
+            result = tm.generate_script("solo-stack-evidence-prompt", params)
+
+        self.assertEqual(result, "A valid generated script.")
+        prompt = generate.call_args.kwargs["video_script_prompt"]
+        self.assertIn("OPERATOR-RECORDED SOURCE DATA", prompt)
+        self.assertIn("Operator-recorded current value", prompt)
+        self.assertIn("not independent verification", prompt)
+        self.assertIn("Do not invent prices, plan limits, features, or sources", prompt)
+        self.assertLessEqual(len(prompt), tm.llm.MAX_SCRIPT_PROMPT_LENGTH)
+
+
+    def test_generate_script_warns_against_unsourced_prices_when_evidence_is_missing(self):
+        params = VideoParams(video_subject="Canva pricing", video_script="")
+
+        with (
+            patch.dict(tm.config.app, {"solo_stack_mode": True}),
+            patch.object(tm, "_solo_stack_evidence_records", return_value=[]),
+            patch.object(tm.llm, "generate_script", return_value="A generated script.") as generate,
+        ):
+            tm.generate_script("solo-stack-no-evidence", params)
+
+        prompt = generate.call_args.kwargs["video_script_prompt"]
+        self.assertIn("No current operator-recorded source evidence", prompt)
+        self.assertIn("Do not state exact prices, plan limits", prompt)
+
+
+    def test_unlicensed_local_animatediff_is_blocked_without_explicit_opt_in(self):
+        params = SimpleNamespace(video_source="animatediff")
+        with (
+            patch.dict(tm.config.app, {"allow_unverified_animatediff": False}),
+            patch.object(tm, "_mark_task_failed") as mark_failed,
+            patch.object(tm.local_animatediff, "generate_videos") as generate,
+        ):
+            result = tm.get_video_materials(
+                "disabled-animatediff-task", params, ["scene"], 10
+            )
+
+        self.assertIsNone(result)
+        mark_failed.assert_called_once()
+        generate.assert_not_called()
+
+
+    def test_solo_stack_quality_gate_blocks_critical_audio_and_aspect_flags(self):
+        report = {
+            "flags": [
+                "repeated_visuals",
+                "missing_audio",
+                "unexpected_aspect_ratio",
+            ]
+        }
+        self.assertEqual(
+            tm._solo_stack_quality_blockers(report),
+            ["missing_audio", "unexpected_aspect_ratio"],
+        )
+        self.assertEqual(tm._solo_stack_quality_blockers({"flags": []}), [])
+
+
+    def test_save_script_data_includes_solo_stack_editorial_review(self):
+        params = VideoParams(video_subject="ChatGPT meeting notes for freelancers")
+        script = (
+            "Can ChatGPT turn a messy meeting into clear client action items? "
+            "We will test it with a realistic transcript, then inspect the summary, "
+            "action owners, deadlines and missing details. The goal is to see whether "
+            "a freelancer can rely on the result without spending more time correcting "
+            "it than writing notes manually. We will separate useful features from "
+            "unsupported marketing promises."
+        )
+
+        evidence = [{
+            "claim_id": "chatgpt-plan-limit",
+            "product": "ChatGPT",
+            "claim": "Operator-recorded plan limit.",
+            "source_url": "https://chatgpt.com/pricing/",
+            "publisher": "OpenAI",
+            "checked_at": "2026-11-24",
+            "is_current": True,
+        }]
+        with (
+            patch.dict(tm.config.app, {"solo_stack_mode": True}),
+            patch.object(
+                tm, "_solo_stack_evidence_records", return_value=evidence
+            ),
+            patch.object(tm.task_artifacts, "write_script_data") as write_data,
+        ):
+            tm.save_script_data("solo-stack-review-task", script, "", params)
+
+        payload = write_data.call_args.args[1]
+        self.assertTrue(payload["solo_stack_review"]["opening_hook"]["is_question"])
+        self.assertTrue(
+            payload["solo_stack_review"]["opening_hook"]["topic_specificity_confirmed"]
+        )
+        self.assertEqual(
+            payload["solo_stack_review"]["fact_check_status"],
+            "not_independently_verified",
+        )
+        self.assertEqual(payload["solo_stack_evidence"], evidence)
+
+
     def test_generate_final_videos_forwards_clip_speed_and_fit_mode(self):
         """任务编排层必须把画面速度和适配模式传给视频合成服务。"""
         params = VideoParams(
@@ -118,6 +241,43 @@ class TestTaskService(unittest.TestCase):
             combine_videos.call_args.kwargs["video_fit_mode"],
             params.video_fit_mode,
         )
+
+    def test_scene_labels_exclude_solo_stack_product_evidence(self):
+        """Product screenshots/recordings must remain unobstructed by host graphics."""
+        with tempfile.TemporaryDirectory() as directory:
+            manifest = {
+                "script": "We compare ChatGPT with the workflow.",
+                "material_sources": [
+                    {"local_file": "stock.mp4", "search_term": "freelance workflow"},
+                    {
+                        "local_file": "chatgpt.mp4",
+                        "search_term": "ChatGPT real app screen capture",
+                        "source_kind": "solo_stack_product_evidence",
+                        "product": "ChatGPT",
+                    },
+                ],
+            }
+            Path(directory, "script.json").write_text(
+                __import__("json").dumps(manifest), encoding="utf-8"
+            )
+            with (
+                patch.object(tm.utils, "task_dir", return_value=directory),
+                patch.object(
+                    tm.scene_planner, "build_scene_labels",
+                    return_value={"stock.mp4": "freelance workflow"},
+                ) as build_labels,
+            ):
+                result = tm._get_material_scene_labels(
+                    "solo-stack-evidence-task",
+                    ["stock.mp4", "chatgpt.mp4"],
+                )
+
+        build_labels.assert_called_once_with(
+            "We compare ChatGPT with the workflow.",
+            {"stock.mp4": "freelance workflow"},
+        )
+        self.assertEqual(result, {"stock.mp4": "freelance workflow"})
+
 
     def test_semantic_footage_check_only_inspects_selected_sources(self):
         """Semantic QA must inspect compositor-selected clips, not unused candidates."""

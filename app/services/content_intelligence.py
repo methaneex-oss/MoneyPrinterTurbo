@@ -10,7 +10,7 @@ import re
 from collections import Counter
 
 _WORD = re.compile(r"[^\W_]+(?:['’][^\W_]+)?", re.UNICODE)
-_SENTENCE = re.compile(r"(?<=[.!?。！？])\s+")
+_SENTENCE = re.compile(r"""(?<=[.!?。！？])["'”’)]*\s+""")
 _NUMBER_OR_QUANTITY = re.compile(
     r"(?<!\w)(?:[$€£₦]\s*)?\d[\d,]*(?:\.\d+)?\s*(?:%|percent|per cent|million|billion|trillion|thousand|"
     r"years?|months?|days?|hours?|minutes?|seconds?|weeks?|degrees?|kg|km|miles?|cm|mm|meters?|metres?|"
@@ -93,4 +93,73 @@ def audit_script(script: str) -> dict:
         "absolute_claim_terms_to_review": absolutes,
         "fact_check_status": "not_independently_verified",
         "warnings": warnings,
+    }
+
+
+
+_SOLO_STACK_HOOK_STOPWORDS = {
+    "a", "an", "and", "are", "as", "at", "can", "do", "does", "for", "from",
+    "how", "i", "if", "in", "into", "is", "it", "its", "of", "on", "or",
+    "our", "the", "their", "this", "to", "vs", "we", "what", "when", "with",
+    "you", "your", "review", "comparison", "tool", "tools",
+}
+
+
+def audit_solo_stack_script(script: str, subject: str = "") -> dict:
+    """Check Solo Stack's opening structure without pretending to fact-check it.
+
+    This is a deterministic editorial preflight. Topic overlap is a lightweight
+    lexical signal, not semantic proof; numeric and factual claims remain
+    independently unverified until evidence is reviewed.
+    """
+    report = audit_script(script)
+    opening = str(report.get("opening_sentence") or "").strip()
+    opening_tokens = [token.casefold() for token in _WORD.findall(opening)]
+    subject_tokens = {
+        token.casefold()
+        for token in _WORD.findall(str(subject or ""))
+        if token.casefold() not in _SOLO_STACK_HOOK_STOPWORDS
+    }
+    matched_terms = sorted(
+        topic_term
+        for topic_term in subject_tokens
+        if any(
+            token == topic_term
+            or (
+                min(len(token), len(topic_term)) >= 5
+                and (token.startswith(topic_term) or topic_term.startswith(token))
+            )
+            for token in opening_tokens
+        )
+    )
+    is_question = opening.rstrip("\"'”’)]").endswith("?")
+    hook_warnings = []
+    if not opening:
+        hook_warnings.append("missing_opening_hook")
+    elif not is_question:
+        hook_warnings.append("opening_hook_must_be_a_question")
+    if opening and not 5 <= len(opening_tokens) <= 24:
+        hook_warnings.append("opening_hook_length_outside_5_to_24_words")
+    if opening and _GENERIC_OPENING.search(opening):
+        hook_warnings.append("opening_hook_is_generic")
+    if subject_tokens and not matched_terms:
+        hook_warnings.append("opening_hook_topic_specificity_unconfirmed")
+
+    warnings = list(dict.fromkeys(report["warnings"] + hook_warnings))
+    return {
+        **report,
+        "opening_hook": {
+            "text": opening,
+            "is_question": is_question,
+            "subject_terms": sorted(subject_tokens),
+            "matched_subject_terms": matched_terms,
+            "topic_specificity_confirmed": bool(matched_terms),
+            "structural_warnings": hook_warnings,
+        },
+        "warnings": warnings,
+        "editorial_status": (
+            "structural_checks_passed" if not warnings
+            else "editorial_review_required"
+        ),
+        "fact_check_status": "not_independently_verified",
     }

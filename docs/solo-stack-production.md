@@ -55,3 +55,46 @@ Unit tests validate the deterministic presenter frames, asset ingestion checks,
 manifest integrity, URL validation, and evidence records. They do not prove that
 an external product's UI is current; source review remains required. End-to-end
 video appearance and GPU inference must be checked in a real Colab run.
+
+
+
+## Solo Stack editorial preflight
+
+Generated and operator-supplied scripts receive a channel-specific opening review
+before narration. The deterministic preflight checks that the first spoken
+sentence is a short question, rejects common generic opening phrases, and looks
+for lexical overlap between the question and the episode subject. It records
+warnings in the task log and the `solo_stack_review` section of `script.json`.
+Topic overlap is only a lightweight signal, not semantic proof. Numeric and
+factual claims remain marked `not_independently_verified`; the preflight does
+not replace source collection or human fact review and does not silently rewrite
+an operator's script.
+
+
+## Evidence-aware script generation
+
+When a supported product is named in the episode subject, script generation
+loads matching operator-recorded evidence from the persistent ledger. Only
+records checked within the last 30 days are supplied as prompt context, with
+their claim, plan/value, publisher, checked date and source URL. The prompt
+treats these records as data rather than instructions and prohibits inventing
+additional prices, limits or features. If no current record exists, the prompt
+explicitly tells the model not to state exact prices or plan limits as facts.
+
+The full matching evidence set, including stale records, is attached to
+`script.json` for editorial review. Freshness is based on the operator's
+`checked_at` date; it is not independent source verification. The existing
+numeric-claim audit remains active, and every such claim still requires manual
+matching to its cited source before publication.
+
+
+## Final-render technical gate
+
+The final-video inspection now records decoded width/height and aspect ratio,
+samples short windows of the audio track, and reports missing/silent audio or
+audio/video duration mismatch. Solo Stack runs require an audio stream and pass
+the configured output aspect ratio (normally 9:16) into this inspection. Solo Stack blocks task completion when the final file has no audio, effectively
+silent/invalid audio, an audio/video duration mismatch, or the wrong output
+aspect ratio. Other visual diagnostics remain warnings. A clean technical report
+still cannot prove voice quality, app-interface legibility, factual accuracy or
+good editing. The full MP4 requires a human watch/listen pass.

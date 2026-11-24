@@ -1,11 +1,13 @@
 import json
+from datetime import date, timedelta
 from pathlib import Path
 
 import pytest
 from PIL import Image
 
 from app.services.solo_stack_assets import (
-    SoloStackAssetError, add_evidence, register_asset, validate_source_url, verify_asset,
+    SoloStackAssetError, add_evidence, evidence_for_products, register_asset,
+    validate_source_url, verify_asset,
 )
 from app.services.solo_stack_presenter import BRAND, build_presenter_frame
 from app.services import task
@@ -78,6 +80,42 @@ def test_evidence_requires_source_and_checked_date(tmp_path):
             project, claim_id="bad-date", product="Canva", claim="A claim",
             source_url="https://example.com", publisher="Example", checked_at="yesterday",
         )
+
+
+def test_evidence_lookup_is_product_scoped_and_marks_stale_records(tmp_path):
+    today = date.today()
+    project = tmp_path / "evidence"
+    add_evidence(
+        project, claim_id="chatgpt-current", product="ChatGPT",
+        claim="Current plan information recorded by the operator.",
+        source_url="https://chatgpt.com/pricing/?campaign=private",
+        publisher="OpenAI", checked_at=today.isoformat(),
+        value="Current observed value", plan="Free",
+    )
+    add_evidence(
+        project, claim_id="chatgpt-stale", product="ChatGPT",
+        claim="Older plan information.",
+        source_url="https://chatgpt.com/pricing/",
+        publisher="OpenAI",
+        checked_at=(today - timedelta(days=31)).isoformat(),
+        value="Older observed value", plan="Free",
+    )
+    add_evidence(
+        project, claim_id="canva-current", product="Canva",
+        claim="Unrelated product evidence.",
+        source_url="https://www.canva.com/pricing/",
+        publisher="Canva", checked_at=today.isoformat(),
+    )
+
+    records = evidence_for_products(project, ["chatgpt"])
+    assert {record["claim_id"] for record in records} == {
+        "chatgpt-current", "chatgpt-stale"
+    }
+    current = next(record for record in records if record["claim_id"] == "chatgpt-current")
+    stale = next(record for record in records if record["claim_id"] == "chatgpt-stale")
+    assert current["is_current"] is True
+    assert stale["is_current"] is False
+    assert current["source_url"] == "https://chatgpt.com/pricing/"
 
 
 def test_manifest_tampering_is_detected(tmp_path):

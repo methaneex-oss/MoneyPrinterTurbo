@@ -87,3 +87,17 @@ and branded card rendering. These tests do not prove vendor websites remain unch
 or that every official page permits automated capture. Live Colab browser capture,
 the resulting video, visual readability and commercial asset clearance still
 require real-runtime review.
+
+
+For portrait Shorts, the browser's official-page fallback uses a 1080×1920
+mobile viewport. Operator-supplied portrait and near-square captures are placed
+in a tall evidence panel instead of being reduced into a shallow landscape card. Landscape
+captures retain their full aspect ratio; the renderer does not crop away side
+panels merely to fill a vertical frame.
+
+
+Product-evidence clips carry an explicit `source_kind=solo_stack_product_evidence`
+marker in the task manifest. Scene labels and their decorative stock-footage
+graphics are not applied to those clips, and Stack is only overlaid on labelled
+non-evidence scenes. This keeps the actual application interface unobstructed
+for inspection.

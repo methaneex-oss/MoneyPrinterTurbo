@@ -7,7 +7,8 @@ All frames are rendered locally with Pillow; no image API is required.
 from __future__ import annotations
 
 import math
-from PIL import Image, ImageDraw
+from functools import lru_cache
+from PIL import Image, ImageDraw, ImageFilter
 
 BRAND = {
     "name": "Solo Stack",
@@ -29,7 +30,7 @@ _OUTFITS = {
     "creative": ("#8069C8", "#FF8963", "#F6F4EE"),
     "studio": ("#1C8F83", "#F2B84B", "#F6F4EE"),
 }
-_VALID_ACTIONS = {"talk", "present", "question", "react", "lean", "think", "celebrate", "warn"}
+_VALID_ACTIONS = {"talk", "present", "question", "react", "lean", "think", "celebrate", "warn", "shrug"}
 _VALID_EXPRESSIONS = {"talk", "curious", "surprised", "skeptical", "thoughtful", "pleased", "concerned"}
 _VALID_GAZES = {"camera", "evidence", "up"}
 
@@ -43,7 +44,7 @@ def _clamp(value: float, low: float, high: float) -> float:
     return max(low, min(high, float(value)))
 
 
-def build_presenter_frame(
+def _build_presenter_frame_native(
     time_seconds: float = 0.0,
     size: tuple[int, int] = (480, 560),
     expression: str = "talk",
@@ -116,8 +117,13 @@ def build_presenter_frame(
     arm_wave = math.sin(t * 3.0) * 7 * power
     left_hand = (125.0, 385.0)
     right_hand = (355.0, 385.0)
-    if action in {"present", "question"}:
-        right_hand = (372 + arm_wave, 292 - 12 * power)
+    if action == "present":
+        right_hand = (370 + arm_wave, 308 - 10 * power)
+    elif action == "question":
+        right_hand = (368 + arm_wave, 276 - 16 * power)
+    elif action == "shrug":
+        left_hand = (118 - arm_wave, 300 - 8 * power)
+        right_hand = (362 + arm_wave, 300 - 8 * power)
     elif action == "react":
         right_hand = (356 + arm_wave, 326 - 18 * power)
         left_hand = (124 - arm_wave, 326 - 18 * power)
@@ -134,9 +140,59 @@ def build_presenter_frame(
     poly([(310+lean, 278+bob), (340+lean, 294+bob), (right_hand[0]+16, right_hand[1]+10), (right_hand[0]-14, right_hand[1]+23)], teal, ink, 6)
     ellipse((left_hand[0]-19, left_hand[1]-18, left_hand[0]+20, left_hand[1]+20), skin, ink, 4)
     ellipse((right_hand[0]-18, right_hand[1]-18, right_hand[0]+21, right_hand[1]+21), skin, ink, 4)
-    if action == "warn":
-        draw.line([p(right_hand[0]+1, right_hand[1]-8), p(right_hand[0]+1, right_hand[1]-42)],
-                  fill=skin, width=max(3, int(10*scale)))
+    # Small palm/finger creases make the hands read as hands at phone size.
+    # The marks stay inside the palm silhouette and remain understated.
+    hand_detail = _rgb("#B77F68")
+    for hand_x, hand_y in (left_hand, right_hand):
+        for offset in (-7, 0, 7):
+            draw.line(
+                [p(hand_x + offset, hand_y - 3),
+                 p(hand_x + offset + 2, hand_y + 5)],
+                fill=hand_detail,
+                width=max(1, int(1.5 * scale)),
+            )
+    if action == "present":
+        # Open, slightly fanned fingers read as an invitation to inspect the
+        # evidence rather than the pointed emphasis used for a question.
+        for offset in (-10, 0, 10):
+            finger_path = [
+                p(right_hand[0] + offset, right_hand[1] - 10),
+                p(right_hand[0] + offset + 1, right_hand[1] - 25),
+            ]
+            draw.line(
+                finger_path, fill=ink, width=max(4, int(8 * scale)),
+            )
+            draw.line(
+                finger_path, fill=skin, width=max(2, int(5 * scale)),
+            )
+    if action in {"question", "warn"}:
+        # Questions use a diagonal emphasis; warnings use a clear vertical
+        # stop/attention gesture. Both receive the same clean outer contour.
+        if action == "warn":
+            finger_path = [
+                p(right_hand[0] + 1, right_hand[1] - 10),
+                p(right_hand[0] + 1, right_hand[1] - 42),
+            ]
+        else:
+            finger_path = [
+                p(right_hand[0] + 4, right_hand[1] - 12),
+                p(right_hand[0] + 13, right_hand[1] - 30),
+                p(right_hand[0] + 18, right_hand[1] - 35),
+            ]
+        draw.line(
+            finger_path, fill=ink, width=max(5, int(9 * scale)), joint="curve",
+        )
+        draw.line(
+            finger_path, fill=skin, width=max(3, int(6 * scale)), joint="curve",
+        )
+    if action == "shrug":
+        # The mirrored hands and short outward forearms make uncertainty or a
+        # trade-off visibly different from a one-handed presentation.
+        for hand_x, hand_y in (left_hand, right_hand):
+            draw.arc(
+                (*p(hand_x - 12, hand_y - 10), *p(hand_x + 12, hand_y + 10)),
+                190, 350, fill=ink, width=max(2, int(3 * scale)),
+            )
     if action == "think":
         ellipse((right_hand[0]-7, right_hand[1]-7, right_hand[0]+7, right_hand[1]+7), skin, ink, 2)
 
@@ -162,38 +218,56 @@ def build_presenter_frame(
         eye_shift = -4
     brow_left, brow_right = 0, 0
     mouth = expression if expression in _VALID_EXPRESSIONS else "talk"
+    eye_opening = 1.0
     if mouth == "surprised":
         brow_left = brow_right = -8
+        eye_opening = 1.18
+    elif mouth == "curious":
+        brow_left, brow_right = -7, 1
+        eye_opening = 1.10
     elif mouth == "skeptical":
         brow_left, brow_right = -7, 5
+        eye_opening = 0.82
     elif mouth == "thoughtful":
         brow_left = brow_right = 3
+        eye_opening = 0.94
     elif mouth == "concerned":
         brow_left, brow_right = 5, -4
+        eye_opening = 0.96
     elif mouth == "pleased":
         brow_left, brow_right = -2, -2
-    # Eye whites and irises.
+        eye_opening = 0.94
+    eye_top = 173.5 - 20.5 * eye_opening
+    eye_bottom = 173.5 + 20.5 * eye_opening
+    # Expression-specific eye openness makes curiosity and skepticism legible
+    # even when the mouth is moving with narration audio.
     for cx in (198, 280):
-        ellipse((cx-18+head_x, 153+bob, cx+18+head_x, 194+bob), cream, ink, 3)
+        ellipse((cx-18+head_x, eye_top+bob, cx+18+head_x, eye_bottom+bob), cream, ink, 3)
         ellipse((cx-5+eye_shift+head_x, 166+bob, cx+7+eye_shift+head_x, 183+bob), ink)
         ellipse((cx-2+eye_shift+head_x, 168+bob, cx+2+eye_shift+head_x, 172+bob), cream)
     draw.line([p(174+head_x, 144+bob+brow_left), p(216+head_x, 139+bob+brow_left)],
               fill=ink, width=max(3, int(8*scale)))
     draw.line([p(262+head_x, 139+bob+brow_right), p(304+head_x, 144+bob+brow_right)],
               fill=ink, width=max(3, int(8*scale)))
-    # Natural eye blinks use the episode timeline, not a per-shot reset.
+    # Natural blinks are eased over the episode timeline. A short triangular
+    # envelope gives the eyelids a visible close/open motion instead of a
+    # one-frame switch that can look like flicker at 30 fps.
     blink_phase = t % 4.2
-    if 0.16 <= blink_phase <= 0.29:
+    blink_progress = max(0.0, 1.0 - abs(blink_phase - 0.225) / 0.065)
+    blink_progress = blink_progress * blink_progress * (3.0 - 2.0 * blink_progress)
+    if blink_progress > 0.015:
+        lid_drop = (eye_bottom - eye_top) * blink_progress
         for left, right in ((178, 218), (260, 300)):
-            draw.line(
-                [p(left+head_x, 174+bob), p(right+head_x, 174+bob)],
+            lid_y = eye_top + lid_drop
+            draw.rectangle(
+                (*p(left+head_x, eye_top+bob),
+                 *p(right+head_x, lid_y+bob)),
                 fill=skin,
-                width=max(8, int(22*scale)),
             )
             draw.line(
-                [p(left+head_x, 174+bob), p(right+head_x, 174+bob)],
+                [p(left+head_x, lid_y+bob), p(right+head_x, lid_y+bob)],
                 fill=ink,
-                width=max(2, int(4*scale)),
+                width=max(2, int((3.0 + 1.5 * blink_progress)*scale)),
             )
     # Nose and expressive mouth.
     draw.arc((*p(218+head_x, 184+bob), *p(261+head_x, 224+bob)), 285, 75,
@@ -210,6 +284,14 @@ def build_presenter_frame(
     elif mouth == "concerned":
         draw.arc((*p(215+head_x, 226+bob), *p(266+head_x, 255+bob)), 185, 350,
                  fill=ink, width=max(3, int(5*scale)))
+    elif mouth == "curious":
+        ellipse((228+head_x, 222+bob, 252+head_x, 244+bob), ink)
+    elif mouth == "skeptical":
+        draw.arc((*p(215+head_x, 222+bob), *p(267+head_x, 252+bob)), 185, 340,
+                 fill=ink, width=max(3, int(5*scale)))
+    elif mouth == "thoughtful":
+        draw.line([p(225+head_x, 238+bob), p(255+head_x, 238+bob)],
+                  fill=ink, width=max(3, int(4*scale)))
     elif mouth == "pleased":
         draw.arc((*p(210+head_x, 202+bob), *p(270+head_x, 254+bob)), 5, 175,
                  fill=ink, width=max(3, int(6*scale)))
@@ -224,6 +306,100 @@ def build_presenter_frame(
         draw.rounded_rectangle(stripe, radius=max(2, int(3*scale)),
                                fill=_rgb(BRAND["palette"]["cyan"]) if index != 1 else coral)
     return image
+
+
+
+def build_presenter_frame(
+    time_seconds: float = 0.0,
+    size: tuple[int, int] = (480, 560),
+    expression: str = "talk",
+    *,
+    action: str = "talk",
+    gaze: str = "camera",
+    wardrobe: str = "base",
+    intensity: float = 0.85,
+    mouth_open: float = 0.0,
+) -> Image.Image:
+    """Render Stack with supersampling, soft studio depth and restrained detail.
+
+    The character is drawn at 2x the requested resolution and downsampled with
+    Lanczos. This materially improves curves, facial features and small brand
+    details at Shorts-sized overlay dimensions without external assets or APIs.
+    The transparent silhouette and public API remain unchanged.
+    """
+    width, height = (max(1, int(v)) for v in size)
+    render_size = (max(160, width * 2), max(160, height * 2))
+    frame = _build_presenter_frame_native(
+        time_seconds,
+        render_size,
+        expression,
+        action=action,
+        gaze=gaze,
+        wardrobe=wardrobe,
+        intensity=intensity,
+        mouth_open=mouth_open,
+    )
+
+    # A soft, offset contact shadow separates Stack from busy app footage while
+    # retaining alpha transparency for MoviePy compositing.
+    alpha = frame.getchannel("A")
+    shadow_mask = Image.new("L", frame.size, 0)
+    shadow_mask.paste(alpha, (0, max(1, int(height * 0.018))))
+    shadow_mask = shadow_mask.filter(
+        ImageFilter.GaussianBlur(max(1.0, min(width, height) * 0.018))
+    )
+    shadow = Image.new("RGBA", frame.size, (5, 12, 24, 0))
+    shadow.putalpha(shadow_mask.point(lambda value: int(value * 0.34)))
+    frame = Image.alpha_composite(shadow, frame)
+
+    # Fine, low-contrast costume details make the jacket read as tailored
+    # fabric rather than a flat polygon. Coordinates use the original 480x560
+    # design grid, independent of output resolution.
+    draw = ImageDraw.Draw(frame)
+    scale = min(render_size[0] / 480, render_size[1] / 560)
+    ox = (render_size[0] - 480 * scale) / 2
+    oy = (render_size[1] - 560 * scale) / 2
+
+    def point(x: float, y: float) -> tuple[int, int]:
+        return int(ox + x * scale), int(oy + y * scale)
+
+    line_width = max(1, int(2.0 * scale))
+    seam = (205, 246, 244, 105)
+    # Lapel seams and a narrow jacket edge highlight.
+    draw.line(
+        [point(190, 281), point(202, 330), point(188, 365)],
+        fill=seam,
+        width=line_width,
+        joint="curve",
+    )
+    draw.line(
+        [point(290, 281), point(278, 330), point(292, 365)],
+        fill=seam,
+        width=line_width,
+        joint="curve",
+    )
+    # Three tiny fasteners give the torso a deliberate, finished construction.
+    for y in (390, 408, 426):
+        cx, cy = point(310, y)
+        radius = max(1, int(2.2 * scale))
+        draw.ellipse(
+            (cx-radius, cy-radius, cx+radius, cy+radius),
+            fill=(246, 244, 238, 190),
+        )
+
+    # A restrained hair highlight helps the swept silhouette stay readable
+    # against dark footage; it never changes the character's identity.
+    draw.arc(
+        (*point(170, 64), *point(258, 126)),
+        190,
+        270,
+        fill=(139, 166, 190, 115),
+        width=max(1, int(2.5 * scale)),
+    )
+
+    # Preserve requested dimensions even for very small callers.
+    return frame.resize((width, height), Image.Resampling.LANCZOS)
+
 
 
 def add_presenter_overlay(
@@ -275,17 +451,46 @@ def add_presenter_overlay(
     y = max(12, height - target_h - int(height * 0.035))
     duration = min(clip_duration * fraction, cap)
 
-    def frame(t):
+    @lru_cache(maxsize=4)
+    def rendered_frame(time_seconds: float) -> Image.Image:
         mouth_open = 0.0
         if audio_activity and audio_activity_fps > 0:
-            activity_index = int(max(0.0, audio_offset + float(t)) * audio_activity_fps)
+            activity_index = int(
+                max(0.0, audio_offset + time_seconds) * audio_activity_fps
+            )
             if activity_index < len(audio_activity):
                 mouth_open = audio_activity[activity_index]
-        animation_time = max(0.0, audio_offset + float(t))
-        return np.asarray(build_presenter_frame(
-            animation_time, (target_w, target_h), expression, action=action, gaze=gaze,
-            wardrobe=wardrobe, intensity=intensity, mouth_open=mouth_open,
-        ).convert("RGB"))
+        animation_time = max(0.0, audio_offset + time_seconds)
+        return build_presenter_frame(
+            animation_time,
+            (target_w, target_h),
+            expression,
+            action=action,
+            gaze=gaze,
+            wardrobe=wardrobe,
+            intensity=intensity,
+            mouth_open=mouth_open,
+        )
 
-    overlay = VideoClip(frame, duration=duration).with_position((x, y))
+    def frame(t):
+        return np.asarray(rendered_frame(float(t)).convert("RGB"))
+
+    fade_duration = min(0.22, duration * 0.18)
+
+    def mask_frame(t):
+        alpha = np.asarray(
+            rendered_frame(float(t)).getchannel("A"), dtype=np.float32
+        ) / 255.0
+        # Fade the host in and out so the character never pops over evidence
+        # or disappears on a hard cut. The animation timeline itself remains
+        # episode-relative and deterministic.
+        fade_in = min(1.0, max(0.0, float(t) / fade_duration))
+        fade_out = min(
+            1.0, max(0.0, (duration - float(t)) / fade_duration)
+        )
+        return alpha * min(fade_in, fade_out)
+
+    overlay = VideoClip(frame, duration=duration).with_mask(
+        VideoClip(mask_frame, is_mask=True, duration=duration)
+    ).with_position((x, y))
     return CompositeVideoClip([clip, overlay], size=(width, height)).with_duration(float(clip.duration))

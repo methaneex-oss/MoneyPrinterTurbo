@@ -33,3 +33,17 @@ def test_director_does_not_force_one_fixed_action():
     ]
     actions = {plan_performance(script, topic)["action"] for script, topic in scripts}
     assert len(actions) >= 3
+
+
+def test_neutral_scene_fallback_includes_a_distinct_two_handed_shrug():
+    from unittest.mock import patch
+
+    from app.services.solo_stack_director import plan_scene_performance
+
+    with patch(
+        "app.services.solo_stack_director.plan_performance",
+        return_value={"emotion": "explaining", "action": "talk"},
+    ):
+        result = plan_scene_performance("Subscription comparison", 3, {})
+    assert result["action"] == "shrug"
+    assert result["expression"] == "skeptical"

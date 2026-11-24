@@ -297,8 +297,17 @@ def _make_editorial_card(
         radius=6, fill="#46D3E7",
     )
     panel_w = size[0] - margin * 2
-    panel_h = 640 if portrait else 760
-    panel_y = 600 if portrait else 190
+    if portrait:
+        # A portrait operator capture should use the available vertical canvas,
+        # not be shrunk into the same shallow landscape card as a desktop image.
+        with Image.open(source) as source_image:
+            source_ratio = source_image.width / max(1, source_image.height)
+        if source_ratio < 1.15:
+            panel_y, panel_h = 250, 1320
+        else:
+            panel_y, panel_h = 600, 640
+    else:
+        panel_h, panel_y = 760, 190
     image = _fit_image(source, (panel_w - 28, panel_h - 28))
     canvas.paste(image, (margin + 14, panel_y + 14))
     draw.rounded_rectangle(
@@ -466,6 +475,8 @@ def prepare_episode_product_visuals(
             material_records.append({
                 "local_file": clip.name,
                 "search_term": f"{product} real app screen capture",
+                "source_kind": "solo_stack_product_evidence",
+                "product": product,
             })
 
         user_capture_counts[product] = rendered_count
@@ -497,7 +508,7 @@ def prepare_episode_product_visuals(
                 browser = playwright.chromium.launch(headless=True, args=["--no-sandbox"])
                 try:
                     page = browser.new_page(
-                        viewport={"width": 1440, "height": 900},
+                        viewport={"width": 1080, "height": 1920},
                         device_scale_factor=1,
                         locale="en-US",
                     )
@@ -513,7 +524,7 @@ def prepare_episode_product_visuals(
                             product_dir.mkdir(parents=True, exist_ok=True)
                             page.goto(spec["url"], wait_until="domcontentloaded", timeout=45000)
                             page.wait_for_timeout(2500)
-                            page.evaluate("window.scrollTo(0, Math.min(650, document.body.scrollHeight))")
+                            page.evaluate("window.scrollTo(0, 0)")
                             page.wait_for_timeout(900)
                             source_page = page.url
                             parsed = urlparse(source_page)
@@ -571,6 +582,8 @@ def prepare_episode_product_visuals(
                                 material_records.append({
                                     "local_file": clip.name,
                                     "search_term": f"{product} official product interface",
+                                    "source_kind": "solo_stack_product_evidence",
+                                    "product": product,
                                 })
                         except Exception as exc:
                             logger.warning(

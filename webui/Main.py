@@ -153,6 +153,19 @@ VIDEO_SOURCE_GROUPS = {
     "ai_image": ("openai_image", "codex_image", "useapi_image"),
     "local": ("local",),
 }
+
+
+def _available_video_source_groups(settings=None):
+    settings = settings or config.snapshot_config_with_pending(config.app)
+    groups = dict(VIDEO_SOURCE_GROUPS)
+    if not bool(settings.get("allow_unverified_animatediff", False)):
+        groups["ai_video"] = tuple(
+            provider for provider in groups["ai_video"]
+            if provider != "animatediff"
+        )
+    return groups
+
+
 # Upload-Post 的 API Key 与发布用户分别在两个页面管理，并且发布用户名称
 # 不等于登录邮箱。集中维护入口可以避免多语言文案各自硬编码 URL 后发生偏差，
 # 也方便用户从 WebUI 直接完成首次配置和后续账号维护。
@@ -3416,7 +3429,7 @@ def _remember_material_provider(group, widget_key):
 def _initialize_material_navigation(target, settings):
     groups = {
         group: providers
-        for group, providers in VIDEO_SOURCE_GROUPS.items()
+        for group, providers in _available_video_source_groups(settings).items()
         if group != "local"
     }
     source = settings.get("video_source", "pexels")
@@ -3458,7 +3471,7 @@ def _material_provider_labels():
         "wavespeed": tr("WaveSpeed AI Video"),
         "muapi": tr("MuAPI AI Video"),
         "useapi": tr("useapi.net AI Video"),
-        "animatediff": tr("Local AnimateDiff (Free GPU)"),
+        "animatediff": tr("Experimental Local AnimateDiff (License Unverified)"),
         "openai_image": tr("OpenAI Compatible Text-to-Image"),
         "codex_image": tr("codex.image.label"),
         "useapi_image": tr("useapi.net Nano Banana Images"),
@@ -3486,7 +3499,7 @@ def _general_provider_readiness(settings):
     return {
         "llm": configured_llm_providers(settings, oauth),
         **configured_material_providers(
-            settings, VIDEO_SOURCE_GROUPS, oauth["openai_codex"]
+            settings, _available_video_source_groups(settings), oauth["openai_codex"]
         ),
     }
 
@@ -3525,6 +3538,14 @@ def _activate_general_provider(section):
 
 
 def _render_general_settings(settings):
+    if (
+        settings.get("video_source") == "animatediff"
+        and not bool(settings.get("allow_unverified_animatediff", False))
+    ):
+        settings = dict(settings)
+        settings["video_source"] = "pixabay"
+        _set_runtime_config("app", "video_source", "pixabay")
+    available_groups = _available_video_source_groups(settings)
     configured = _general_provider_readiness(settings)
     material_labels = _material_provider_labels()
     llm_labels = {
@@ -3548,7 +3569,7 @@ def _render_general_settings(settings):
             if section == "llm"
             else settings.get("video_source", "pexels")
         )
-        is_active_category = section == "llm" or active in VIDEO_SOURCE_GROUPS[section]
+        is_active_category = section == "llm" or active in available_groups[section]
         options = configured[section]
         widget_key = localized_widget_key(f"settings_general_{section}_provider_select")
         memory_key = f"settings_general_{section}_provider"
@@ -3650,10 +3671,17 @@ def _save_settings_api_keys(config_key, widget_key):
 def _render_material_provider_settings(provider):
     app_settings = config.snapshot_config_with_pending(config.app)
     if provider == "animatediff":
-        st.markdown("**Local AnimateDiff (Free GPU)**")
-        st.caption(
-            "Uses the local Colab CUDA runtime and open model weights. "
-            "No API key, hosted inference endpoint, or paid fallback is used."
+        if not bool(app_settings.get("allow_unverified_animatediff", False)):
+            st.warning(
+                "AnimateDiff is disabled because the adapter's commercial-use "
+                "license has not been verified. It is hidden from normal source selection."
+            )
+            return
+        st.markdown("**Experimental Local AnimateDiff (License Unverified)**")
+        st.warning(
+            "Do not use in production until the model-weight license is reviewed and permits the intended use. "
+            "Do not use these weights in monetized production until the "
+            "authoritative model-weight license is verified."
         )
         status = local_animatediff.health_check()
         if status:
@@ -3667,7 +3695,7 @@ def _render_material_provider_settings(provider):
                 "Not running. Start the AnimateDiff setup cell in the Colab notebook "
                 "and wait for the model warm-up to finish."
             )
-    elif provider in VIDEO_SOURCE_GROUPS["stock_video"]:
+    elif provider in _available_video_source_groups(app_settings)["stock_video"]:
         labels = {
             "pexels": "Pexels API Key",
             "pixabay": "Pixabay API Key",
@@ -5012,7 +5040,7 @@ def _render_settings_dialog():
                     st.session_state.get("settings_material_providers", {})
                 )
                 for group, title_key, help_key in sections:
-                    providers = VIDEO_SOURCE_GROUPS[group]
+                    providers = _available_video_source_groups(app_settings)[group]
                     default_provider = remembered.get(group, providers[0])
                     if default_provider not in providers:
                         default_provider = providers[0]
@@ -6155,24 +6183,33 @@ def _render_video_settings(panel, params):
                 "metaso_minimax": tr("Metaso MiniMax H3"),
                 "muapi": tr("MuAPI AI Video"),
                 "useapi": tr("useapi.net AI Video"),
-                "animatediff": tr("Local AnimateDiff (Free GPU)"),
+                "animatediff": tr("Experimental Local AnimateDiff (License Unverified)"),
                 "loomloom": tr("Shengsuan Cloud AI Video"),
                 "openai_image": tr("OpenAI Compatible Text-to-Image"),
                 "codex_image": tr("codex.image.label"),
                 "useapi_image": tr("useapi.net Nano Banana Images"),
                 "local": tr("Local file"),
             }
+            source_settings = config.snapshot_config_with_pending(config.app)
+            available_video_source_groups = _available_video_source_groups(source_settings)
             saved_video_source_name = str(
-                config.snapshot_config_with_pending(config.app).get("video_source", "pexels")
-                or "pexels"
+                source_settings.get("video_source", "pexels") or "pexels"
             )
+            available_sources = {
+                provider
+                for providers in available_video_source_groups.values()
+                for provider in providers
+            }
+            if saved_video_source_name not in available_sources:
+                saved_video_source_name = "pixabay"
+                _set_runtime_config("app", "video_source", saved_video_source_name)
             params.video_source = grouped_selectbox(
                 tr("Video Source"),
                 groups=(
-                    (tr("Stock Video"), VIDEO_SOURCE_GROUPS["stock_video"]),
-                    (tr("AI Video"), VIDEO_SOURCE_GROUPS["ai_video"]),
-                    (tr("AI Image"), VIDEO_SOURCE_GROUPS["ai_image"]),
-                    (tr("Local Material"), VIDEO_SOURCE_GROUPS["local"]),
+                    (tr("Stock Video"), available_video_source_groups["stock_video"]),
+                    (tr("AI Video"), available_video_source_groups["ai_video"]),
+                    (tr("AI Image"), available_video_source_groups["ai_image"]),
+                    (tr("Local Material"), available_video_source_groups["local"]),
                 ),
                 default_value=saved_video_source_name,
                 key="video_source_select",

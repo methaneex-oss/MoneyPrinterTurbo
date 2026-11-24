@@ -1,4 +1,4 @@
-from app.services.content_intelligence import audit_script
+from app.services.content_intelligence import audit_script, audit_solo_stack_script
 
 
 def test_audit_estimates_narration_and_flags_unverified_numeric_claims():
@@ -79,3 +79,43 @@ def test_audit_flags_an_overlong_opening_sentence():
     )
 
     assert "opening_sentence_too_long_for_short_form" in report["warnings"]
+
+
+def test_solo_stack_audit_accepts_a_topic_specific_question_hook():
+    report = audit_solo_stack_script(
+        "Can ChatGPT turn a messy meeting into clear client action items? "
+        "We will test it with a realistic transcript, then inspect the summary, "
+        "action owners, deadlines and missing details. The goal is to see whether "
+        "a freelancer can rely on the result without spending more time correcting "
+        "it than writing notes manually. We will separate useful features from "
+        "unsupported marketing promises.",
+        "ChatGPT meeting notes for freelancers",
+    )
+
+    assert report["opening_hook"]["is_question"] is True
+    assert report["opening_hook"]["topic_specificity_confirmed"] is True
+    assert report["editorial_status"] == "structural_checks_passed"
+    assert report["fact_check_status"] == "not_independently_verified"
+
+
+def test_solo_stack_audit_flags_generic_or_non_question_openings():
+    report = audit_solo_stack_script(
+        "Welcome to this video. Today we are looking at a useful AI tool.",
+        "Canva for brand logos",
+    )
+
+    assert report["opening_hook"]["is_question"] is False
+    assert "opening_hook_must_be_a_question" in report["warnings"]
+    assert "opening_hook_is_generic" in report["warnings"]
+    assert "opening_hook_topic_specificity_unconfirmed" in report["warnings"]
+    assert report["editorial_status"] == "editorial_review_required"
+
+
+def test_solo_stack_audit_handles_question_mark_followed_by_quote():
+    report = audit_solo_stack_script(
+        'Can Canva create a brand logo that looks professional?" '
+        "We will inspect the result.",
+        "Canva brand logo design",
+    )
+
+    assert report["opening_hook"]["is_question"] is True

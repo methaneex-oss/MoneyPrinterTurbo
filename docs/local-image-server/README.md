@@ -5,10 +5,10 @@ Stock footage often has little to do with the script. The `openai_image` source 
 It exposes the OpenAI `/v1/images/generations` API and supports three local model backends:
 
 - `sdxl` (default): [RealVisXL V5.0 Lightning](https://huggingface.co/SG161222/RealVisXL_V5.0_Lightning), higher-quality SDXL output, 6 steps.
-- `sd-turbo`: [Stability AI SD-Turbo](https://huggingface.co/stabilityai/sd-turbo), one-step generation with lower VRAM demand. This is the automatic fallback for Colab GPUs with 8–14 GiB.
+- `sd-turbo`: [Stability AI SD-Turbo](https://huggingface.co/stabilityai/sd-turbo), one-step generation with lower VRAM demand. Commercial production requires registration under the [Stability AI Community License](https://stability.ai/community-license); it is not selected by default.
 - `sd15`: [Stable Diffusion 1.5](https://huggingface.co/stable-diffusion-v1-5/stable-diffusion-v1-5), a conventional 512px model with a slower 20-step profile.
 
-Set `IMAGE_BACKEND` and optionally `IMAGE_MODEL` before starting the server. The Colab notebook selects SDXL at 14 GiB or more, SD-Turbo at 8–14 GiB, and Pixabay below 8 GiB. The 512px models use smaller aspect-ratio buckets; the final editor scales them to the output canvas.
+Set `IMAGE_BACKEND` and optionally `IMAGE_MODEL` before starting the server. The Colab notebook selects RealVisXL SDXL Lightning at 14 GiB or more. It uses Pixabay below 14 GiB unless the operator explicitly confirms that Stability AI commercial registration is complete, in which case SD-Turbo can be selected at 8–14 GiB. The 512px models use smaller aspect-ratio buckets; the final editor scales them to the output canvas.
 
 Tested on an RTX 5070 Ti (16 GB):
 
@@ -29,7 +29,7 @@ python -m venv .venv
 
 The first request downloads the selected model weights. SDXL Lightning is about 6.6 GB; SD-Turbo and SD 1.5 are smaller. The server listens on `http://127.0.0.1:7861`. A `size` that isn't `WIDTHxHEIGHT` with positive numbers gets a 422 response.
 
-For Colab, the notebook checks for a CUDA GPU with at least 14 GiB VRAM, starts this server, and calls `POST /warmup` before enabling the local image source. Warmup downloads and loads the weights before a video task begins, avoiding a long first-request download. The endpoint returns the model name and whether it is resident on the GPU. The idle worker can still move the model back to CPU after `IMAGE_IDLE_SECONDS`.
+For Colab, the notebook checks the CUDA GPU and applicable model-use conditions, starts this server, and calls `POST /warmup` before enabling the local image source. Warmup downloads and loads the weights before a video task begins, avoiding a long first-request download. The endpoint returns the model name and whether it is resident on the GPU. The idle worker can still move the model back to CPU after `IMAGE_IDLE_SECONDS`.
 
 Tests, from the repo root, with no GPU needed: `python -m pytest test/services/test_local_image_policy.py test/services/test_local_image_server.py`. The server tests run the real HTTP app with a stand-in pipeline and a fake Ollama.
 
@@ -92,3 +92,13 @@ Scene keywords come from an LLM, so a video about religion or history can ask th
 Swapping in a whole scene is deliberate. A negative prompt alone doesn't keep people out reliably: in testing it still produced figures in 2 of 6 prophet scenes. Raising the guidance strength to compensate burned the Lightning model's images.
 
 Known limits: keyword rules miss phrasings they don't list and can misfire on common names (Muhammad Ali, a person called Isa). `test/services/test_local_image_policy.py` covers the expected cases. Edit `policy.toml` to fit your audience.
+
+
+## Model-use terms
+
+RealVisXL V5.0 Lightning is tagged `openrail++` on its Hugging Face model
+repository. SD-Turbo is covered by Stability AI's Community License for
+commercial use subject to registration and the agreement's revenue threshold.
+The notebook therefore leaves `SD_TURBO_COMMERCIAL_REGISTERED = False` by
+default and uses Pixabay rather than assuming registration. Review the current
+license terms directly before changing that opt-in.

@@ -52,6 +52,27 @@ def test_editorial_card_preserves_real_product_image_inside_brand_frame(tmp_path
         assert max(abs(actual - expected) for actual, expected in zip(pixel, (16, 24, 39))) <= 3
 
 
+def test_portrait_operator_capture_uses_a_tall_mobile_evidence_panel(tmp_path):
+    source = tmp_path / "portrait-app.png"
+    Image.new("RGB", (720, 1280), "#ff0000").save(source)
+    output = tmp_path / "portrait-card.jpg"
+
+    _make_editorial_card(source, output, "Notion", "9:16", "USER-SUPPLIED CAPTURE")
+
+    with Image.open(output).convert("RGB") as result:
+        assert result.size == (1080, 1920)
+        min_x, min_y = result.width, result.height
+        max_x = max_y = -1
+        for y in range(200, 1600):
+            for x in range(80, 1000):
+                red, green, blue = result.getpixel((x, y))
+                if red > 180 and green < 90 and blue < 90:
+                    min_x, min_y = min(min_x, x), min(min_y, y)
+                    max_x, max_y = max(max_x, x), max(max_y, y)
+    assert max_y - min_y > 1100
+    assert max_x - min_x > 600
+
+
 def test_identifies_products_from_a_single_string_term():
     assert identify_products("", "", "Use Claude to review this proposal") == ["Claude"]
 
@@ -184,6 +205,11 @@ def test_episode_uses_verified_operator_captures_without_launching_browser(tmp_p
         "real app screen capture" in item["search_term"]
         for item in task_manifest["material_sources"]
     )
+    assert all(
+        item["source_kind"] == "solo_stack_product_evidence"
+        for item in task_manifest["material_sources"]
+    )
+    assert all(item["product"] == "ChatGPT" for item in task_manifest["material_sources"])
 
 
 def test_screen_recording_normalizer_preserves_aspect_and_drops_source_audio(tmp_path, monkeypatch):

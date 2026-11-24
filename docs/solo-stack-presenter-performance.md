@@ -22,3 +22,22 @@ This is **audio-reactive mouth animation**, not phoneme-accurate lip synchroniza
 - Do not claim that a user workflow was performed unless the video contains a genuine recording of that workflow.
 - Public product-page visuals are not authenticated account demonstrations.
 - Do not claim voice quality or acting quality is approved until a generated episode has been listened to and reviewed.
+
+
+## Colab voice runtime reproducibility
+
+The Colab notebook pins Kokoro-FastAPI to upstream commit
+`5364fc31c770bd60069edc60521eb7bca4e5f5a9` rather than cloning a moving
+branch head. The pinned upstream model downloader verifies the Kokoro model
+and configuration with SHA-256 checks before loading. Its
+`api/src/models/v1_0` directory is linked to the persistent Google Drive model
+cache, so a Colab runtime reset does not require downloading the model again.
+The service binds to loopback and is not exposed through the Streamlit tunnel.
+
+The notebook now auditions both plain speech and the exact SSML/rate request
+shape used by MoneyPrinterTurbo. It changes the active TTS provider only after
+the selected `am_michael` voice responds to both requests and both audio files
+pass a minimum-size sanity check. This verifies endpoint compatibility and
+produces samples for listening; it does not establish that the voice is
+artistically approved. Existing voice settings remain untouched if setup or
+audition fails.

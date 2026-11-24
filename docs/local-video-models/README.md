@@ -1,6 +1,6 @@
 # Local AI video generation
 
-The AnimateDiff backend runs locally on a CUDA GPU attached to Google Colab. It does not call paid inference APIs. The production path is exposed in MoneyPrinterTurbo as **Local AnimateDiff (Free GPU)** only after the local service is ready.
+The AnimateDiff backend runs locally on a CUDA GPU attached to Google Colab. It does not call paid inference APIs. It is an experimental path and is **disabled by default** in the Solo Stack Colab notebook because the adapter's authoritative commercial-use licence remains unresolved. Do not use it for monetized production until that licence is confirmed. The local service can expose **Local AnimateDiff (Free GPU)** only after an explicit non-commercial opt-in and successful startup.
 
 ## Architecture
 
@@ -24,3 +24,20 @@ LTX-Video 2B remains a separate candidate; it is not silently installed or selec
 ## Validation boundary
 
 Automated tests cover the source routing, HTTP response handling, manifest persistence, Colab preflight/setup syntax, and provider visibility. They do not prove model inference, visual quality, or successful end-to-end rendering on a live Colab GPU. Those require the GPU runtime to be attached and a real MP4 to be generated and inspected.
+
+## Solo Stack production default
+
+The Colab notebook intentionally leaves `ALLOW_ANIMATEDIFF_EXPERIMENTAL = False`.
+It does not download the motion-adapter weights, stop the local image service,
+or switch MoneyPrinterTurbo to AnimateDiff while the adapter licence is
+unresolved. The supported no-cost production path remains local SDXL/SD-Turbo
+still-image generation when GPU preflight succeeds, with the configured
+Pixabay source as fallback. This is a deliberate rights and reliability gate,
+not a claim that the experimental video backend is production-ready.
+
+
+The task service also rejects `video_source=animatediff` unless
+`app.allow_unverified_animatediff=true` is explicitly set. The WebUI hides
+this provider from ordinary source selection while the flag is false and
+migrates stale saved selections back to Pixabay. The Colab notebook sets the
+flag only when its explicit experimental opt-in constant is changed to true.
