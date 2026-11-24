@@ -8,6 +8,7 @@ product-interface evidence.
 from __future__ import annotations
 
 import hashlib
+import io
 import json
 import logging
 import re
@@ -228,7 +229,7 @@ def _download_image(item: dict, destination: Path) -> Path | None:
                 return None
         finally:
             response.close()
-        with Image.open(__import__("io").BytesIO(body)) as image:
+        with Image.open(io.BytesIO(body)) as image:
             image_format = image.format
             image.verify()
         extension = {"JPEG": ".jpg", "PNG": ".png", "WEBP": ".webp"}.get(image_format)
