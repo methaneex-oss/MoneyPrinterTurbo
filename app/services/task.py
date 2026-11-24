@@ -1378,15 +1378,16 @@ def _solo_stack_product_visual_blockers(task_id: str) -> list[str]:
             return ["product_visual_coverage_unavailable"]
     if not isinstance(coverage, list):
         return []
-    missing = [
-        str(item.get("product") or "unnamed product")
-        for item in coverage
-        if isinstance(item, dict)
-        and (
-            item.get("status") == "missing"
-            or int(item.get("visual_count") or 0) <= 0
-        )
-    ]
+    missing = []
+    for item in coverage:
+        if not isinstance(item, dict):
+            continue
+        try:
+            visual_count = int(item.get("visual_count") or 0)
+        except (TypeError, ValueError):
+            visual_count = 0
+        if item.get("status") == "missing" or visual_count <= 0:
+            missing.append(str(item.get("product") or "unnamed product"))
     return [f"missing_product_visuals:{', '.join(missing)}"] if missing else []
 
 
