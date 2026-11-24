@@ -422,17 +422,21 @@ def _overlay_position_scores(
         raise ValueError("presenter placement dimensions must be positive")
 
     margin_x = max(12, int(width * 0.035))
-    x_values = (
-        max(0, width - overlay_w - margin_x),
-        margin_x,
-        max(0, (width - overlay_w) // 2),
-    )
-    # Keep the full host above the lower subtitle-safe boundary.
-    y_values = (
-        max(8, int(height * 0.04)),
-        max(8, int(height * 0.16)),
-        max(8, int(height * 0.28)),
-    )
+    min_x = min(margin_x, max(0, width - overlay_w))
+    max_x = max(min_x, width - overlay_w - margin_x)
+    step_x = max(12, overlay_w // 4)
+    x_values = list(range(min_x, max_x + 1, step_x))
+    if not x_values or x_values[-1] != max_x:
+        x_values.append(max_x)
+
+    # Search the complete upper/middle safe area rather than a fixed corner
+    # menu. The subtitle band is excluded from the candidate space entirely.
+    min_y = max(12, int(height * 0.045))
+    max_y = max(min_y, int(height * 0.66) - overlay_h)
+    step_y = max(12, overlay_h // 4)
+    y_values = list(range(min_y, max_y + 1, step_y))
+    if not y_values or y_values[-1] != max_y:
+        y_values.append(max_y)
     scores = {}
     for y in y_values:
         for x in x_values:
