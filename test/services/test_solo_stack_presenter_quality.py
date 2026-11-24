@@ -6,7 +6,6 @@ from app.services.solo_stack_presenter import (
     build_presenter_frame,
 )
 
-
 def test_presenter_quality_renderer_preserves_requested_dimensions_and_alpha():
     frame = build_presenter_frame(0.75, (240, 280), expression="curious")
     assert frame.size == (240, 280)
@@ -15,7 +14,6 @@ def test_presenter_quality_renderer_preserves_requested_dimensions_and_alpha():
     values = set(alpha.getdata())
     assert 0 in values
     assert any(0 < value < 255 for value in values)
-
 
 def test_presenter_quality_renderer_is_deterministic():
     first = build_presenter_frame(
@@ -28,7 +26,6 @@ def test_presenter_quality_renderer_is_deterministic():
     )
     assert first.tobytes() == second.tobytes()
 
-
 def test_presenter_quality_renderer_keeps_acting_and_costume_variation():
     base = build_presenter_frame(0.9, (240, 280), action="present")
     reaction = build_presenter_frame(
@@ -40,12 +37,10 @@ def test_presenter_quality_renderer_keeps_acting_and_costume_variation():
     )
     assert len({base.tobytes(), reaction.tobytes(), creative.tobytes()}) == 3
 
-
 def test_presenter_quality_renderer_handles_short_overlay_dimensions():
     frame = build_presenter_frame(0.2, (104, 122), expression="talk")
     assert frame.size == (104, 122)
     assert frame.getbbox() is not None
-
 
 def test_presenter_blink_transitions_through_partial_and_closed_states():
     open_frame = build_presenter_frame(0.16, (240, 280))
@@ -60,7 +55,6 @@ def test_presenter_blink_transitions_through_partial_and_closed_states():
     closed_face = closed_frame.crop(face_box).tobytes()
     assert len({open_face, partial_face, closed_face}) == 3
 
-
 def test_presenter_uses_distinct_curious_skeptical_and_thoughtful_faces():
     curious = build_presenter_frame(1.1, (240, 280), expression="curious")
     skeptical = build_presenter_frame(1.1, (240, 280), expression="skeptical")
@@ -74,7 +68,6 @@ def test_presenter_uses_distinct_curious_skeptical_and_thoughtful_faces():
     }
     assert len(faces) == 4
 
-
 def test_facial_expression_remains_visible_during_audio_reactive_speech():
     curious = build_presenter_frame(
         1.1, (240, 280), expression="curious", mouth_open=0.65,
@@ -84,7 +77,6 @@ def test_facial_expression_remains_visible_during_audio_reactive_speech():
     )
     face_box = (70, 55, 175, 115)
     assert curious.crop(face_box).tobytes() != skeptical.crop(face_box).tobytes()
-
 
 def test_presenter_overlay_preserves_transparency_over_video():
     background = (24, 80, 120)
@@ -99,7 +91,6 @@ def test_presenter_overlay_preserves_transparency_over_video():
     finally:
         composite.close()
 
-
 def test_presenter_distinguishes_open_palm_question_and_shrug_actions():
     present = build_presenter_frame(1.3, (240, 280), action="present")
     question = build_presenter_frame(1.3, (240, 280), action="question")
@@ -109,7 +100,6 @@ def test_presenter_distinguishes_open_palm_question_and_shrug_actions():
     assert len({
         present.tobytes(), question.tobytes(), shrug.tobytes(), warn.tobytes()
     }) == 4
-
 
 def test_presenter_overlay_fades_in_and_out_without_a_hard_pop():
     background = (24, 80, 120)
