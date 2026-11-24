@@ -299,7 +299,7 @@ def prepare_dynamic_scene_visuals(
     duration: float = 3.5,
     max_scenes: int = _MAX_SCENES,
 ) -> list[str]:
-    """Find supporting stills; never count them as authenticated product-interface evidence."""
+    """Find supporting stills; mark them is_product_evidence=false, never authenticated UI."""
     from app.services.material import get_api_key
     from app.utils import utils
 
