@@ -40,6 +40,7 @@ from app.services import (
     solo_stack_assets,
     solo_stack_director,
     solo_stack_product_media,
+    solo_stack_visual_retrieval,
     task_artifacts,
     twelvelabs,
     useapi,
@@ -2522,6 +2523,34 @@ def _run_pipeline(
                 "Solo Stack could not prepare authentic product visuals: "
                 + str(exc)[:400],
             )
+
+        # Discover topic-specific supporting stills from free image sources.
+        # These clips are editorial support only and never satisfy product-evidence gates.
+        if bool(config.app.get("solo_stack_dynamic_visuals_enabled", True)):
+            try:
+                dynamic_visual_clips = solo_stack_visual_retrieval.prepare_dynamic_scene_visuals(
+                    task_id=task_id,
+                    subject=params.video_subject,
+                    script=video_script,
+                    terms=video_terms,
+                    aspect=getattr(params.video_aspect, "value", params.video_aspect),
+                    duration=max(2.5, min(4.5, float(params.video_clip_duration or 3.5))),
+                    max_scenes=3,
+                )
+                if dynamic_visual_clips:
+                    downloaded_videos = solo_stack_product_media.interleave_product_visuals(
+                        downloaded_videos or [],
+                        dynamic_visual_clips,
+                    )
+                    logger.info(
+                        "added {} topic-aware Solo Stack supporting visuals".format(
+                            len(dynamic_visual_clips)
+                        ),
+                    )
+            except Exception as exc:
+                # General stock footage remains a valid fallback. A retrieval outage
+                # must not mislabel generic imagery as product evidence or break the task.
+                logger.warning("Solo Stack dynamic visual retrieval skipped: {}".format(exc))
 
     if not downloaded_videos:
         return _mark_task_failed(
