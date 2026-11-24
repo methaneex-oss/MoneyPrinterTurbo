@@ -448,7 +448,9 @@ def add_presenter_overlay(
     target_h = min(int(height * 0.34), 380)
     target_w = int(target_h * 480 / 560)
     x = max(12, width - target_w - int(width * 0.035)) if corner == "right" else int(width * 0.035)
-    y = max(12, height - target_h - int(height * 0.035))
+    # Keep Stack in the upper safe zone; subtitles occupy the lower third,
+    # and product-evidence clips are excluded from presenter overlays.
+    y = max(12, int(height * 0.045))
     duration = min(clip_duration * fraction, cap)
 
     @lru_cache(maxsize=4)
