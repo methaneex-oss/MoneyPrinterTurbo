@@ -2472,8 +2472,13 @@ def _run_pipeline(
                     "could not persist Solo Stack product-visual capture failure"
                 )
             logger.warning(
-                "Solo Stack product visual capture failed; final release gate "
-                "will reject uncovered named products: {}".format(exc),
+                "Solo Stack product visual capture failed: {}".format(exc),
+            )
+            return _mark_task_failed(
+                task_id,
+                "materials",
+                "Solo Stack could not prepare authentic product visuals: "
+                + str(exc)[:400],
             )
 
     if not downloaded_videos:
