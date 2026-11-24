@@ -478,8 +478,6 @@ def _choose_overlay_position(
     clip, overlay_size: tuple[int, int]
 ) -> tuple[int, int]:
     """Choose a low-obstruction zone from several actual clip frames."""
-    import numpy as np
-
     duration = max(0.0, float(getattr(clip, "duration", 0.0) or 0.0))
     sample_times = sorted({
         min(max(0.0, duration * fraction), max(0.0, duration - 0.04))
