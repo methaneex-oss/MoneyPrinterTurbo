@@ -92,6 +92,7 @@ def test_colab_local_ai_image_setup_is_syntax_valid_and_has_safe_fallback():
         and "Solo Stack preflight tests" in "".join(cell.get("source", []))
     )
     preflight_source = "".join(preflight_cell.get("source", []))
+    ast.parse(preflight_source)
     assert "pytest" in preflight_source
     assert "test/services/test_task.py" in preflight_source
     assert "test/services/test_material.py" in preflight_source
