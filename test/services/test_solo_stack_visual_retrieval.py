@@ -18,7 +18,7 @@ def test_build_scene_queries_tracks_distinct_script_scenes():
 
 def test_build_scene_queries_has_bounded_fallback():
     assert retrieval.build_scene_queries("Local AI tools", "", limit=20) == [
-        "Local AI tools"
+        "local ai tools"
     ]
 
 
