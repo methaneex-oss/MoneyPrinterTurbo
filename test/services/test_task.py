@@ -229,6 +229,19 @@ class TestTaskService(unittest.TestCase):
 
         self.assertEqual(blockers, ["product_visual_coverage_unavailable"])
 
+    def test_product_named_in_search_terms_requires_visual_coverage(self):
+        with tempfile.TemporaryDirectory() as directory:
+            Path(directory, "script.json").write_text(
+                '{"script":"A practical design workflow.",'
+                '"params":{"video_subject":"Freelance design workflow"},'
+                '"search_terms":["Canva editor interface"]}',
+                encoding="utf-8",
+            )
+            with patch.object(tm.utils, "task_dir", return_value=directory):
+                blockers = tm._solo_stack_product_visual_blockers("visual-task")
+
+        self.assertEqual(blockers, ["product_visual_coverage_unavailable"])
+
     def test_product_coverage_missing_a_named_product_blocks_release(self):
         with tempfile.TemporaryDirectory() as directory:
             Path(directory, "script.json").write_text(
