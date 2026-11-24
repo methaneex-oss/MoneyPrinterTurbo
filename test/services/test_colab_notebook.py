@@ -96,6 +96,7 @@ def test_colab_local_ai_image_setup_is_syntax_valid_and_has_safe_fallback():
     assert "pytest" in preflight_source
     assert "test/services/test_task.py" in preflight_source
     assert "test/services/test_material.py" in preflight_source
+    assert "test/services/test_solo_stack_visual_retrieval.py" in preflight_source
     assert "tests/test_visual_quality.py" in preflight_source
     assert 'path = Path("config.toml")' not in image_cell
     assert image_cell.index("warmup_request") < image_cell.rindex('set_video_source(\n            "openai_image"')
