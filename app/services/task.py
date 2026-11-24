@@ -2482,9 +2482,9 @@ def _run_pipeline(
         **({"jalapeno_video_endpoint": jalapeno_video_endpoint}
            if jalapeno_video_endpoint is not None else {}),
     )
-    # Solo Stack supplements stock footage with real public product visuals
-    # from official vendor pages when the episode explicitly names a supported app.
-    # A missing or failed product capture is recorded for the final release gate.
+    # Solo Stack supplements stock footage with public product visuals from
+    # dynamically discovered official sources for products named in the episode.
+    # Missing or failed captures are recorded for the final release gate.
     if bool(config.app.get("solo_stack_mode", False)):
         try:
             product_visual_clips = solo_stack_product_media.prepare_episode_product_visuals(
