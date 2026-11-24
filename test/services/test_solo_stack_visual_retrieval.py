@@ -59,6 +59,6 @@ def test_dynamic_visuals_are_never_product_evidence():
     # not authenticated software-interface captures.
     assert "is_product_evidence" in retrieval.prepare_dynamic_scene_visuals.__doc__
     assert (
-        "never count as authenticated product-interface evidence"
+        "is_product_evidence=false"
         in retrieval.prepare_dynamic_scene_visuals.__doc__
     )
