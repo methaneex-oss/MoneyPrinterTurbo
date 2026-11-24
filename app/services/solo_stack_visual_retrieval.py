@@ -413,6 +413,9 @@ def prepare_dynamic_scene_visuals(
             continue
 
         candidate, image_path = selected
+        # _download_image() writes the validated bytes using the detected real
+        # image extension (.jpg/.png/.webp), not the temporary .img suffix.
+        # Keep the returned path for rendering, manifest paths, and hashing.
         clip_path = clips_dir / f"scene-{scene_index}.mp4"
         try:
             _render_motion_clip(image_path, clip_path, duration, aspect)
