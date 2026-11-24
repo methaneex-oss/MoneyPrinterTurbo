@@ -1009,6 +1009,21 @@ def combine_videos(
     finally:
         close_clip(audio_clip)
     logger.info(f"audio duration: {audio_duration} seconds")
+    audio_activity = []
+    audio_activity_fps = 25
+    if solo_stack_presenter_enabled:
+        try:
+            from app.services.solo_stack_lipsync import build_audio_activity_envelope
+            audio_activity = build_audio_activity_envelope(audio_file, audio_activity_fps)
+            logger.info(
+                "presenter audio-reactive mouth envelope prepared: "
+                f"{len(audio_activity)} frames at {audio_activity_fps} fps"
+            )
+        except Exception as exc:
+            logger.warning(
+                "presenter mouth animation will use its neutral fallback; "
+                f"audio activity extraction failed: {type(exc).__name__}"
+            )
     logger.info(f"maximum clip duration: {max_clip_duration} seconds")
     required_video_duration = _get_required_video_duration(audio_duration)
     logger.info(
@@ -1196,12 +1211,25 @@ def combine_videos(
                             "scene-specific presenter direction unavailable: {}"
                             .format(exc)
                         )
+                # Estimate this scene's position in the concatenated narration.
+                # Source clips are processed in timeline order; skipped clips are rare
+                # and the envelope remains a best-effort visual cue, not word alignment.
+                audio_offset = sum(
+                    min(
+                        float(max_clip_duration),
+                        max(0.0, (item.end_time - item.start_time) / normalized_clip_speed),
+                    )
+                    for item in subclipped_items[:index]
+                )
                 clip = solo_stack_presenter.add_presenter_overlay(
                     clip,
                     expression="talk",
                     acting_direction=scene_direction,
                     max_duration=3.5,
                     duration_fraction=0.46,
+                    audio_activity=audio_activity,
+                    audio_activity_fps=audio_activity_fps,
+                    audio_offset=audio_offset,
                 )
 
             shuffle_side = random.choice(["left", "right", "top", "bottom"])
