@@ -15,7 +15,7 @@ def test_colab_notebook_tracks_active_branch_and_persists_task_state():
     checkout_cell = next(cell for cell in code_cells if "REPO_BRANCH" in cell)
     config_cell = next(cell for cell in code_cells if "task_state_dir" in cell)
 
-    assert 'REPO_BRANCH = "feat/free-ai-video-colab-setup-20261122"' in checkout_cell
+    assert 'REPO_BRANCH = "feat/solo-stack-real-app-visuals-20261124"' in checkout_cell
     assert '"pull", "--ff-only", "origin", REPO_BRANCH' in checkout_cell
     assert "/content/drive/MyDrive/MoneyPrinterTurbo/task-state" in config_cell
 
@@ -82,3 +82,22 @@ def test_colab_animatediff_setup_is_syntax_valid_and_isolated():
     assert "set_video_source('animatediff')" in video_cell
     assert "restore_local_image_source" in video_cell
     assert "No paid fallback" in video_cell
+
+
+
+def test_colab_kokoro_setup_is_syntax_valid_and_persists_config_to_drive():
+    notebook_path = Path(__file__).resolve().parents[2] / "docs" / "MoneyPrinterTurbo.ipynb"
+    notebook = json.loads(notebook_path.read_text(encoding="utf-8"))
+    code_cells = [
+        "".join(cell.get("source", []))
+        for cell in notebook["cells"]
+        if cell.get("cell_type") == "code"
+    ]
+    kokoro_cell = next(cell for cell in code_cells if "KOKORO_DIR" in cell)
+
+    ast.parse(kokoro_cell)
+    assert 'MPT_HOME = Path(os.environ.get("MPT_HOME", str(REPO_DIR)))' in kokoro_cell
+    assert 'config_path = MPT_HOME / "config.toml"' in kokoro_cell
+    assert 'config_path = REPO_DIR / "config.toml"' not in kokoro_cell
+    assert 'audition_path = MPT_HOME / "solo_stack_voice_audition.mp3"' in kokoro_cell
+    assert '"solo_stack_performance_enabled": True' in kokoro_cell
