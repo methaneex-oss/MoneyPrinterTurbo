@@ -1333,6 +1333,19 @@ def _solo_stack_presenter_enabled() -> bool:
     )
 
 
+def _solo_stack_free_bgm_error(params) -> str | None:
+    if (
+        _solo_stack_free_only_enabled()
+        and params.bgm_type in _VIDEO_MUSIC_PROVIDERS
+        and bgm_service.should_use_bgm(params.bgm_type, params.bgm_volume)
+    ):
+        return (
+            "Solo Stack free-only mode blocks external Sonilo/ElevenLabs music "
+            "generation. Select local/random background music or disable BGM."
+        )
+    return None
+
+
 def _solo_stack_quality_blockers(quality_report: dict) -> list[str]:
     """Return objective final-render defects that invalidate a Solo Stack export."""
     critical_flags = {
@@ -1402,15 +1415,9 @@ def generate_final_videos(
         semantic_threshold = max(-1.0, min(1.0, semantic_threshold))
     except (TypeError, ValueError):
         semantic_threshold = 0.20
-    if (
-        _solo_stack_free_only_enabled()
-        and params.bgm_type in _VIDEO_MUSIC_PROVIDERS
-        and bgm_service.should_use_bgm(params.bgm_type, params.bgm_volume)
-    ):
-        raise RuntimeError(
-            "Solo Stack free-only mode blocks external Sonilo/ElevenLabs music "
-            "generation. Select local/random background music or disable BGM."
-        )
+    free_bgm_error = _solo_stack_free_bgm_error(params)
+    if free_bgm_error:
+        raise RuntimeError(free_bgm_error)
     video_music_provider = _VIDEO_MUSIC_PROVIDERS.get(params.bgm_type)
     video_music_requested = (
         video_music_provider is not None
