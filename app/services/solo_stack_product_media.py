@@ -171,30 +171,33 @@ def identify_products(subject: str, script: str, terms=None, limit: int = 3) -> 
     elif terms is None:
         terms = []
     text = " ".join([subject or "", script or "", *terms]).casefold()
-    matches = []
+    candidates = []
     for name, item in PRODUCTS.items():
-        occurrences = [
-            (text.find(alias.casefold()), len(alias))
-            for alias in item["aliases"]
-        ]
-        occurrences = [
-            (position, length)
-            for position, length in occurrences
-            if position >= 0
-        ]
-        if occurrences:
-            first_position = min(position for position, _ in occurrences)
-            # Prefer the most specific alias when a product name contains
-            # another product name (for example, Claude Code vs Claude).
-            longest_at_position = max(
-                length for position, length in occurrences
-                if position == first_position
+        for alias in item["aliases"]:
+            pattern = re.compile(
+                r"(?<![a-z0-9])" + re.escape(alias.casefold()) + r"(?![a-z0-9])"
             )
-            matches.append((first_position, -longest_at_position, name))
-    return [
-        name for _, _, name in sorted(matches)[:max(0, min(5, limit))]
-    ]
+            for match in pattern.finditer(text):
+                candidates.append((
+                    match.start(), match.end(), -len(alias), name, alias.casefold()
+                ))
 
+    selected = []
+    selected_spans = []
+    for start, end, _specificity, name, alias in sorted(candidates):
+        # A broad product alias must not shadow a more specific name at the
+        # same location (Claude Code should not consume a separate Claude slot).
+        contained = any(
+            other_name != name
+            and other_start <= start
+            and end <= other_end
+            for other_start, other_end, other_name in selected_spans
+        )
+        if contained or name in selected:
+            continue
+        selected.append(name)
+        selected_spans.append((start, end, name))
+    return selected[:max(0, min(5, limit))]
 
 def interleave_product_visuals(existing_clips: list[str], product_clips: list[str]) -> list[str]:
     """Distribute product evidence clips through the existing episode timeline."""
