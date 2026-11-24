@@ -141,6 +141,79 @@ class TestTaskService(unittest.TestCase):
         self.assertIn("Do not state exact prices, plan limits", prompt)
 
 
+    def test_paid_llm_is_blocked_before_script_or_term_requests(self):
+        app_config = {
+            "solo_stack_mode": True,
+            "solo_stack_free_only": True,
+            "llm_provider": "openrouter",
+            "openrouter_model_name": "openai/gpt-4o",
+        }
+        script_params = SimpleNamespace(
+            video_script="",
+            video_script_prompt="",
+            video_subject="ChatGPT workflow",
+        )
+        with (
+            patch.dict(tm.config.app, app_config),
+            patch.object(tm, "_solo_stack_evidence_records", return_value=[]),
+            patch.object(tm.llm, "generate_script") as generate_script,
+            self.assertRaisesRegex(RuntimeError, "OpenRouter"),
+        ):
+            tm.generate_script("paid-script-task", script_params)
+        generate_script.assert_not_called()
+
+        term_params = SimpleNamespace(
+            video_terms=[],
+            video_subject="ChatGPT workflow",
+            match_materials_to_script=True,
+        )
+        with (
+            patch.dict(tm.config.app, app_config),
+            patch.object(tm.llm, "generate_terms") as generate_terms,
+            self.assertRaisesRegex(RuntimeError, "OpenRouter"),
+        ):
+            tm.generate_terms("paid-terms-task", term_params, "A script.")
+        generate_terms.assert_not_called()
+
+    def test_paid_tts_is_blocked_before_voice_request(self):
+        params = SimpleNamespace(
+            custom_audio_file="",
+            voice_name="fish_audio:paid-voice",
+        )
+        with (
+            patch.dict(
+                tm.config.app,
+                {"solo_stack_mode": True, "solo_stack_free_only": True},
+            ),
+            patch.object(tm, "resolve_custom_audio_file", return_value=""),
+            patch.object(tm, "_mark_task_failed") as mark_failed,
+            patch.object(tm.voice, "tts") as tts,
+        ):
+            result = tm.generate_audio("paid-tts-task", params, "Test narration.")
+
+        self.assertEqual(result, (None, None, None))
+        mark_failed.assert_called_once()
+        tts.assert_not_called()
+
+    def test_paid_video_provider_is_blocked_before_provider_request(self):
+        params = SimpleNamespace(video_source="ofox")
+        with (
+            patch.dict(
+                tm.config.app,
+                {"solo_stack_mode": True, "solo_stack_free_only": True},
+            ),
+            patch.object(tm, "_mark_task_failed") as mark_failed,
+            patch.object(tm.ofox, "generate_videos") as generate,
+        ):
+            result = tm.get_video_materials(
+                "paid-video-task", params, ["scene"], 10
+            )
+
+        self.assertIsNone(result)
+        mark_failed.assert_called_once()
+        generate.assert_not_called()
+
+
     def test_solo_stack_free_only_allows_openrouter_free_or_local_ollama(self):
         with patch.dict(
             tm.config.app,
