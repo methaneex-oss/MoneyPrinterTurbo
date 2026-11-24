@@ -12,7 +12,7 @@ The SSML path uses the documented `ssml: true` and `allow_voice_tags: true` requ
 
 ## Mouth animation and synchronization boundary
 
-The presenter compositor decodes the narration into a compact 25 Hz RMS activity envelope. Stack's mouth opening follows that envelope on the scene timeline, so the mouth is more active during spoken audio and closes during quieter regions. This works with any narration provider and does not require another AI model.
+The presenter compositor decodes the narration into a compact 25 Hz RMS activity envelope. Stack's mouth opening follows that envelope on the scene timeline, so the mouth is more active during spoken audio and closes during quieter regions. Causal attack/release smoothing prevents mouth movement from leaking backward into preceding silence. Timeline-based eye blinks and existing body/arm motion add natural movement. This works with any narration provider and does not require another AI model.
 
 This is **audio-reactive mouth animation**, not phoneme-accurate lip synchronization. RMS energy does not identify phonemes, syllables, or visemes, and scene offsets are estimated from the ordered clip durations. Exact lip sync would require word/phoneme timestamps and a phoneme-to-viseme mapping with verified timeline alignment. Do not describe the current behavior as phoneme-accurate.
 
