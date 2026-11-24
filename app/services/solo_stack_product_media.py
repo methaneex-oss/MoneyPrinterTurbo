@@ -271,8 +271,14 @@ def _fit_image(source: Path, target_size: tuple[int, int]) -> Image.Image:
         return canvas
 
 
-def _make_editorial_card(source: Path, output: Path, product: str, aspect: str,
-                         source_host: str) -> None:
+def _make_editorial_card(
+    source: Path,
+    output: Path,
+    product: str,
+    aspect: str,
+    source_host: str,
+    source_label: str = "OFFICIAL PRODUCT VISUAL",
+) -> None:
     """Place the real product visual in a branded editorial frame."""
     portrait = aspect in {"9:16", "portrait"}
     size = (1080, 1920) if portrait else (1920, 1080)
@@ -299,7 +305,7 @@ def _make_editorial_card(source: Path, output: Path, product: str, aspect: str,
         radius=22, outline="#46D3E7", width=5,
     )
     footer_y = panel_y + panel_h + (90 if portrait else 60)
-    draw.text((margin, footer_y), "OFFICIAL PRODUCT VISUAL", fill="#46D3E7", font=small)
+    draw.text((margin, footer_y), source_label, fill="#46D3E7", font=small)
     draw.text((margin, footer_y + 42), source_host, fill="#A8B4C7", font=small)
     canvas.save(output, quality=94)
 
@@ -322,6 +328,30 @@ def _render_still_clip(still: Path, output: Path, duration: float,
     subprocess.run(command, check=True, capture_output=True, timeout=90)
 
 
+def _render_video_capture_clip(
+    source: Path,
+    output: Path,
+    duration: float,
+    aspect: str,
+    fps: int = 30,
+) -> None:
+    """Normalize a genuine screen recording without stretching its UI."""
+    width, height = (1080, 1920) if aspect in {"9:16", "portrait"} else (1920, 1080)
+    command = [
+        "ffmpeg", "-y", "-loglevel", "error", "-i", str(source),
+        "-t", str(max(1.0, min(float(duration), 8.0))),
+        "-map", "0:v:0",
+        "-vf", (
+            f"scale={width}:{height}:force_original_aspect_ratio=decrease,"
+            f"pad={width}:{height}:(ow-iw)/2:(oh-ih)/2:color=#101827,"
+            f"fps={fps},format=yuv420p"
+        ),
+        "-an", "-c:v", "libx264", "-preset", "veryfast", "-crf", "21",
+        "-movflags", "+faststart", str(output),
+    ]
+    subprocess.run(command, check=True, capture_output=True, timeout=120)
+
+
 def prepare_episode_product_visuals(
     task_id: str,
     subject: str,
@@ -331,22 +361,18 @@ def prepare_episode_product_visuals(
     duration: float = 4.0,
     max_products: int = 2,
 ) -> list[str]:
-    """Capture official public product visuals and render timeline-ready clips.
+    """Prepare product visuals, preferring verified operator captures.
 
-    Playwright is optional at import time. If the browser is unavailable, the
-    caller can continue with its existing stock/local media workflow.
+    Verified screenshots and screen recordings from the persistent Solo Stack
+    asset library are used first. Public official product-page imagery fills
+    remaining slots. The function never logs into third-party accounts or
+    presents marketing images as authenticated task recordings.
     """
     products = identify_products(subject, script, terms, limit=max_products)
     if not products:
         return []
-    try:
-        from playwright.sync_api import sync_playwright
-    except ImportError as exc:
-        raise RuntimeError(
-            "Solo Stack official product visuals require Playwright; "
-            "the Colab setup cell must install it first."
-        ) from exc
 
+    from app.services import solo_stack_assets
     from app.utils import utils
 
     task_dir = Path(utils.task_dir(task_id)).resolve()
@@ -358,81 +384,217 @@ def prepare_episode_product_visuals(
         "captured_at": datetime.now(timezone.utc).isoformat(),
         "assets": [],
     }
-    clips = []
-    material_records = []
+    clips: list[str] = []
+    material_records: list[dict] = []
+    user_capture_counts: dict[str, int] = {}
 
-    with sync_playwright() as playwright:
-        browser = playwright.chromium.launch(headless=True, args=["--no-sandbox"])
-        try:
-            page = browser.new_page(
-                viewport={"width": 1440, "height": 900},
-                device_scale_factor=1,
-                locale="en-US",
+    # Operator-provided screenshots and screen recordings take priority. The
+    # asset service verifies the original file against its SHA-256 manifest.
+    try:
+        verified_assets = solo_stack_assets.verified_assets_for_products(
+            utils.storage_dir("solo_stack"), products
+        )
+    except (OSError, solo_stack_assets.SoloStackAssetError) as exc:
+        logger.warning("Solo Stack asset library unavailable: %s", exc)
+        verified_assets = []
+
+    assets_by_product: dict[str, list[dict]] = {}
+    for asset in verified_assets:
+        if asset.get("asset_type") == "logo":
+            continue
+        product_key = str(asset.get("product", "")).casefold()
+        assets_by_product.setdefault(product_key, []).append(asset)
+
+    for product in products:
+        product_dir = media_dir / re.sub(r"[^a-z0-9]+", "-", product.casefold()).strip("-")
+        product_dir.mkdir(parents=True, exist_ok=True)
+        product_slug = re.sub(r"[^a-z0-9]+", "-", product.casefold()).strip("-")
+        selected_assets = assets_by_product.get(product.casefold(), [])[:_MAX_IMAGES_PER_PRODUCT]
+        rendered_count = 0
+
+        for asset_index, asset in enumerate(selected_assets, start=1):
+            source = Path(asset["path"])
+            source_host = (
+                urlparse(str(asset.get("source_url") or "")).hostname
+                or "USER-SUPPLIED CAPTURE"
             )
-            for product in products:
-                try:
-                    spec = PRODUCTS[product]
-                    product_dir = media_dir / re.sub(r"[^a-z0-9]+", "-", product.casefold()).strip("-")
-                    product_dir.mkdir(parents=True, exist_ok=True)
-                    page.goto(spec["url"], wait_until="domcontentloaded", timeout=45000)
-                    page.wait_for_timeout(2500)
-                    page.evaluate("window.scrollTo(0, Math.min(650, document.body.scrollHeight))")
-                    page.wait_for_timeout(900)
-                    source_page = page.url
-                    parsed = urlparse(source_page)
-                    if parsed.scheme != "https" or not (
-                        parsed.hostname == spec["domain"]
-                        or parsed.hostname.endswith("." + spec["domain"])
-                    ):
-                        logger.warning("Official page redirected outside its allowlisted domain: %s", source_page)
-                        continue
-    
-                    images = _download_page_images(page, product_dir)
-                    if not images:
-                        screenshot = product_dir / "official-product-page.png"
-                        page.screenshot(path=str(screenshot), full_page=False)
-                        images = [(screenshot, source_page)]
-    
-                    product_slug = re.sub(r"[^a-z0-9]+", "-", product.casefold()).strip("-")
-                    for image_index, (source_image, image_url) in enumerate(images, start=1):
-                        card = product_dir / f"visual-card-{image_index}.jpg"
-                        clip = product_dir / f"{product_slug}-product-visual-{image_index}.mp4"
-                        _make_editorial_card(source_image, card, product, aspect, spec["domain"])
-                        _render_still_clip(card, clip, duration, aspect)
-                        digest = hashlib.sha256(source_image.read_bytes()).hexdigest()
-                        manifest["assets"].append({
-                            "product": product,
-                            "asset_type": "official_product_page_image" if image_url != source_page
-                                          else "official_product_page_capture",
-                            "file": str(source_image.relative_to(task_dir)),
-                            "rendered_clip": str(clip.relative_to(task_dir)),
-                            "source_page": source_page,
-                            "source_asset_url": image_url,
-                            "sha256": digest,
-                            "captured_at": manifest["captured_at"],
-                            "note": "Public official-site visual; not an authenticated in-app task recording.",
-                        })
-                        clips.append(str(clip))
-                        material_records.append({
-                            "local_file": clip.name,
-                            "search_term": f"{product} official product interface",
-                        })
-                except Exception as exc:
-                    logger.warning("Could not capture official product visuals for %s: %s", product, exc)
-                    continue
-        finally:
-            browser.close()
+            if source.suffix.lower() in {".png", ".jpg", ".jpeg", ".webp"}:
+                card = product_dir / f"user-capture-card-{asset_index}.jpg"
+                clip = product_dir / f"{product_slug}-real-app-capture-{asset_index}.mp4"
+                _make_editorial_card(
+                    source, card, product, aspect, source_host,
+                    source_label="USER-CAPTURED APP VISUAL",
+                )
+                _render_still_clip(card, clip, duration, aspect)
+            else:
+                clip = product_dir / f"{product_slug}-screen-recording-{asset_index}.mp4"
+                _render_video_capture_clip(source, clip, duration, aspect)
 
-    manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+            clips.append(str(clip))
+            rendered_count += 1
+            manifest["assets"].append({
+                "product": product,
+                "asset_type": "operator_capture",
+                "source_asset_type": asset.get("asset_type"),
+                "source_asset_id": asset.get("asset_id"),
+                "source_asset_file": asset.get("file"),
+                "rendered_clip": str(clip.relative_to(task_dir)),
+                "source_page": asset.get("source_url"),
+                "sha256": asset.get("sha256"),
+                "captured_at": asset.get("captured_at"),
+                "note": (
+                    "Operator-supplied app capture; original bytes verified "
+                    "against the persistent Solo Stack asset-library manifest."
+                ),
+            })
+            material_records.append({
+                "local_file": clip.name,
+                "search_term": f"{product} real app screen capture",
+            })
+
+        user_capture_counts[product] = rendered_count
+
+    # Public vendor pages are a fallback/complement, not a replacement for
+    # authentic operator-supplied recordings. Do not launch Chromium when all
+    # named products already have enough verified captures.
+    products_needing_public_visuals = [
+        product for product in products
+        if user_capture_counts.get(product, 0) < _MAX_IMAGES_PER_PRODUCT
+    ]
+    sync_playwright = None
+    if products_needing_public_visuals:
+        try:
+            from playwright.sync_api import sync_playwright
+        except ImportError as exc:
+            if not clips:
+                raise RuntimeError(
+                    "Solo Stack official product visuals require Playwright; "
+                    "the Colab setup cell must install it first."
+                ) from exc
+            logger.warning(
+                "Playwright is unavailable; continuing with verified operator captures"
+            )
+
+    if sync_playwright is not None:
+        try:
+            with sync_playwright() as playwright:
+                browser = playwright.chromium.launch(headless=True, args=["--no-sandbox"])
+                try:
+                    page = browser.new_page(
+                        viewport={"width": 1440, "height": 900},
+                        device_scale_factor=1,
+                        locale="en-US",
+                    )
+                    for product in products_needing_public_visuals:
+                        remaining = _MAX_IMAGES_PER_PRODUCT - user_capture_counts.get(product, 0)
+                        if remaining <= 0:
+                            continue
+                        try:
+                            spec = PRODUCTS[product]
+                            product_dir = media_dir / re.sub(
+                                r"[^a-z0-9]+", "-", product.casefold()
+                            ).strip("-")
+                            product_dir.mkdir(parents=True, exist_ok=True)
+                            page.goto(spec["url"], wait_until="domcontentloaded", timeout=45000)
+                            page.wait_for_timeout(2500)
+                            page.evaluate("window.scrollTo(0, Math.min(650, document.body.scrollHeight))")
+                            page.wait_for_timeout(900)
+                            source_page = page.url
+                            parsed = urlparse(source_page)
+                            if parsed.scheme != "https" or not (
+                                parsed.hostname == spec["domain"]
+                                or parsed.hostname.endswith("." + spec["domain"])
+                            ):
+                                logger.warning(
+                                    "Official page redirected outside its allowlisted domain: %s",
+                                    source_page,
+                                )
+                                continue
+
+                            images = _download_page_images(page, product_dir)[:remaining]
+                            if not images:
+                                screenshot = product_dir / "official-product-page.png"
+                                page.screenshot(path=str(screenshot), full_page=False)
+                                images = [(screenshot, source_page)]
+
+                            product_slug = re.sub(
+                                r"[^a-z0-9]+", "-", product.casefold()
+                            ).strip("-")
+                            start_index = user_capture_counts.get(product, 0) + 1
+                            for image_index, (source_image, image_url) in enumerate(
+                                images, start=start_index
+                            ):
+                                card = product_dir / f"visual-card-{image_index}.jpg"
+                                clip = product_dir / (
+                                    f"{product_slug}-product-visual-{image_index}.mp4"
+                                )
+                                _make_editorial_card(
+                                    source_image, card, product, aspect, spec["domain"]
+                                )
+                                _render_still_clip(card, clip, duration, aspect)
+                                digest = hashlib.sha256(source_image.read_bytes()).hexdigest()
+                                manifest["assets"].append({
+                                    "product": product,
+                                    "asset_type": (
+                                        "official_product_page_image"
+                                        if image_url != source_page
+                                        else "official_product_page_capture"
+                                    ),
+                                    "file": str(source_image.relative_to(task_dir)),
+                                    "rendered_clip": str(clip.relative_to(task_dir)),
+                                    "source_page": source_page,
+                                    "source_asset_url": image_url,
+                                    "sha256": digest,
+                                    "captured_at": manifest["captured_at"],
+                                    "note": (
+                                        "Public official-site visual; not an authenticated "
+                                        "in-app task recording."
+                                    ),
+                                })
+                                clips.append(str(clip))
+                                material_records.append({
+                                    "local_file": clip.name,
+                                    "search_term": f"{product} official product interface",
+                                })
+                        except Exception as exc:
+                            logger.warning(
+                                "Could not capture official product visuals for %s: %s",
+                                product,
+                                exc,
+                            )
+                            continue
+                finally:
+                    browser.close()
+        except Exception as exc:
+            logger.warning(
+                "Public product-page capture unavailable; preserving verified "
+                "operator captures: %s",
+                exc,
+            )
+
+    manifest_path.write_text(
+        json.dumps(manifest, indent=2) + "\n", encoding="utf-8"
+    )
     if material_records:
         script_path = task_dir / "script.json"
         try:
             payload = json.loads(script_path.read_text(encoding="utf-8"))
             records = payload.setdefault("material_sources", [])
-            existing = {item.get("local_file") for item in records if isinstance(item, dict)}
-            records.extend(item for item in material_records if item["local_file"] not in existing)
-            script_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
-                                   encoding="utf-8")
+            existing = {
+                item.get("local_file")
+                for item in records if isinstance(item, dict)
+            }
+            records.extend(
+                item for item in material_records
+                if item["local_file"] not in existing
+            )
+            script_path.write_text(
+                json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
+                encoding="utf-8",
+            )
         except (OSError, ValueError, TypeError) as exc:
-            logger.warning("Could not add official product visuals to source manifest: %s", exc)
+            logger.warning(
+                "Could not add Solo Stack product visuals to source manifest: %s",
+                exc,
+            )
     return clips
