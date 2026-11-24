@@ -1177,11 +1177,31 @@ def combine_videos(
                 # narration heading; no generated facts or external assets.
                 clip = scene_graphics.add_scene_graphic(clip, scene_label)
 
-            # The recurring Solo Stack host appears on the opening shot only;
-            # later scenes remain focused on genuine product footage and graphics.
-            if solo_stack_presenter_enabled and index == 0:
+            # Keep the host present throughout the episode without turning the
+            # video into a talking-head overlay. Alternate host-led beats with
+            # unobstructed evidence footage; each appearance is brief and
+            # direction is derived from this scene's grounded label.
+            if solo_stack_presenter_enabled and index % 2 == 0:
+                scene_direction = presenter_direction
+                if scene_label:
+                    try:
+                        from app.services import solo_stack_director
+                        scene_direction = solo_stack_director.plan_scene_performance(
+                            scene_label=scene_label,
+                            scene_index=index,
+                            base_direction=presenter_direction,
+                        )
+                    except Exception as exc:
+                        logger.warning(
+                            "scene-specific presenter direction unavailable: {}"
+                            .format(exc)
+                        )
                 clip = solo_stack_presenter.add_presenter_overlay(
-                    clip, expression="talk", acting_direction=presenter_direction
+                    clip,
+                    expression="talk",
+                    acting_direction=scene_direction,
+                    max_duration=3.5,
+                    duration_fraction=0.46,
                 )
 
             shuffle_side = random.choice(["left", "right", "top", "bottom"])
