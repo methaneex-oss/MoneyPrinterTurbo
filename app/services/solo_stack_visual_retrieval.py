@@ -15,7 +15,7 @@ import re
 import subprocess
 import time
 from pathlib import Path
-from urllib.parse import urlencode, urlparse
+from urllib.parse import urlparse
 
 import requests
 from PIL import Image
