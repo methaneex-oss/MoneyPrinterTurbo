@@ -335,5 +335,5 @@ def test_discovers_official_site_from_wikidata_without_a_product_catalogue_entry
     monkeypatch.setattr(solo_stack_product_media.requests, "get", fake_get)
     source = solo_stack_product_media.discover_official_product_source("FreshBooks")
     assert source["url"] == "https://www.freshbooks.com/"
-    assert source["domain"] == "www.freshbooks.com"
+    assert source["domain"] == "freshbooks.com"
     assert source["discovery_method"] == "wikidata_official_website_property"
