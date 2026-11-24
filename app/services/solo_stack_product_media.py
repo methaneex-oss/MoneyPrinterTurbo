@@ -143,6 +143,18 @@ PRODUCTS = {
         "url": "https://github.com/features/copilot",
         "domain": "github.com",
     },
+    "Claude Code": {
+        "aliases": ("claude code", "claude-code", "anthropic claude code"),
+        "url": "https://claude.com/product/claude-code",
+        "domain": "claude.com",
+    },
+    "llama.cpp": {
+        "aliases": ("llama.cpp", "llama cpp", "ggml llama.cpp"),
+        "url": "https://github.com/ggml-org/llama.cpp",
+        "domain": "github.com",
+        "source_label": "OFFICIAL PROJECT PAGE",
+        "asset_type": "official_project_page_capture",
+    },
 }
 _IMAGE_HINTS = re.compile(
     r"(app|interface|screen|editor|dashboard|chat|design|document|workflow|product|feature)",
@@ -576,16 +588,22 @@ def prepare_episode_product_visuals(
                                     f"{product_slug}-product-visual-{image_index}.mp4"
                                 )
                                 _make_editorial_card(
-                                    source_image, card, product, aspect, spec["domain"]
+                                    source_image, card, product, aspect, spec["domain"],
+                                    source_label=spec.get(
+                                        "source_label", "OFFICIAL PRODUCT VISUAL"
+                                    ),
                                 )
                                 _render_still_clip(card, clip, duration, aspect)
                                 digest = hashlib.sha256(source_image.read_bytes()).hexdigest()
                                 manifest["assets"].append({
                                     "product": product,
                                     "asset_type": (
-                                        "official_product_page_image"
-                                        if image_url != source_page
-                                        else "official_product_page_capture"
+                                        spec.get("asset_type")
+                                        or (
+                                            "official_product_page_image"
+                                            if image_url != source_page
+                                            else "official_product_page_capture"
+                                        )
                                     ),
                                     "file": str(source_image.relative_to(task_dir)),
                                     "rendered_clip": str(clip.relative_to(task_dir)),
