@@ -61,11 +61,22 @@ def test_cache_expires_and_round_trips(tmp_path, monkeypatch):
     assert retrieval._read_cache(cache) is None
 
 
+def test_license_filter_rejects_unknown_and_noncommercial_commons_assets():
+    assert retrieval._license_is_usable({
+        "provider": "pixabay", "license": "Pixabay Content License"
+    })
+    assert retrieval._license_is_usable({
+        "provider": "wikimedia_commons", "license": "CC BY 4.0"
+    })
+    assert not retrieval._license_is_usable({
+        "provider": "wikimedia_commons", "license": "License not identified"
+    })
+    assert not retrieval._license_is_usable({
+        "provider": "wikimedia_commons", "license": "CC BY-NC 4.0"
+    })
+
+
 def test_dynamic_visuals_are_never_product_evidence():
     # The manifest contract is explicit: these are generic supporting images,
     # not authenticated software-interface captures.
-    assert "is_product_evidence" in retrieval.prepare_dynamic_scene_visuals.__doc__
-    assert (
-        "is_product_evidence=false"
-        in retrieval.prepare_dynamic_scene_visuals.__doc__
-    )
+    assert "non-evidence" in retrieval.prepare_dynamic_scene_visuals.__doc__
