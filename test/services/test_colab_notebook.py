@@ -90,11 +90,11 @@ def test_colab_local_ai_image_setup_is_syntax_valid_and_has_safe_fallback():
     assert 'app["allow_unverified_animatediff"] = {source == "animatediff"!r}' in image_cell
     assert 'app["solo_stack_local_image_ready"] = {source == "openai_image"!r}' in image_cell
     preflight_cell = next(
-        cell for cell in notebook.cells
-        if cell.cell_type == "code"
-        and "Solo Stack preflight tests" in "".join(cell.source)
+        cell for cell in notebook["cells"]
+        if cell.get("cell_type") == "code"
+        and "Solo Stack preflight tests" in "".join(cell.get("source", []))
     )
-    preflight_source = "".join(preflight_cell.source)
+    preflight_source = "".join(preflight_cell.get("source", []))
     assert "pytest" in preflight_source
     assert "test/services/test_task.py" in preflight_source
     assert "tests/test_visual_quality.py" in preflight_source
