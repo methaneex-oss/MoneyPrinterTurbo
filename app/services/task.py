@@ -1381,8 +1381,11 @@ def _solo_stack_product_visual_blockers(task_id: str) -> list[str]:
         else getattr(params, "video_subject", "")
     )
     script = str(payload.get("script") or "")
+    search_terms = payload.get("search_terms")
+    if not isinstance(search_terms, (list, tuple)):
+        search_terms = []
     expected_products = solo_stack_product_media.identify_products(
-        str(subject or ""), script, limit=2
+        str(subject or ""), script, search_terms, limit=2
     )
 
     coverage = payload.get("product_visual_coverage")
