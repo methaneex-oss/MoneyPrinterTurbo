@@ -14,9 +14,9 @@ import logging
 import re
 import subprocess
 import time
-from uuid import uuid4
 from pathlib import Path
 from urllib.parse import urlparse
+from uuid import uuid4
 
 import requests
 from PIL import Image
