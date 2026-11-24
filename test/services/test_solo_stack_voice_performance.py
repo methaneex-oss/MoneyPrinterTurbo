@@ -10,7 +10,7 @@ from app.services.solo_stack_presenter import build_presenter_frame
 
 def test_kokoro_performance_ssml_escapes_text_and_keeps_sentence_pacing_subtle():
     result = build_kokoro_performance_ssml(
-        "This is useful. But the hidden pricing is expensive."
+        "Here is the process. But the hidden pricing is expensive."
     )
 
     assert result.startswith("<speak>")
