@@ -8418,23 +8418,31 @@ def _render_audio_settings(panel, params):
 
             # Provider 下拉只负责选择自动配音服务；无配音已经由上方模式控制，
             # 不再作为 TTS Provider 混入列表，避免两个入口表达同一状态。
-            tts_servers = [
-                ("azure-tts-v1", "Azure TTS V1 (Edge TTS)"),
-                ("azure-tts-v2", "Azure TTS V2"),
-                ("siliconflow", "SiliconFlow TTS"),
-                ("gemini-tts", "Google Gemini TTS"),
-                ("mimo-tts", "Xiaomi MiMo TTS"),
-                ("minimax-tts", "MiniMax TTS"),
-                ("elevenlabs", "ElevenLabs TTS"),
-                ("chatterbox", "Chatterbox TTS"),
-                ("kokoro", "Kokoro TTS"),
-                ("fish_audio", "Fish Audio TTS"),
-                ("voxcpm", "VoxCPM TTS"),
-            ]
+            free_only_voice = bool(
+                config.app.get(
+                    "solo_stack_free_only", config.app.get("solo_stack_mode", False)
+                )
+            )
+            if free_only_voice:
+                tts_servers = [("kokoro", "Kokoro TTS (Local)")]
+            else:
+                tts_servers = [
+                    ("azure-tts-v1", "Azure TTS V1 (Edge TTS)"),
+                    ("azure-tts-v2", "Azure TTS V2"),
+                    ("siliconflow", "SiliconFlow TTS"),
+                    ("gemini-tts", "Google Gemini TTS"),
+                    ("mimo-tts", "Xiaomi MiMo TTS"),
+                    ("minimax-tts", "MiniMax TTS"),
+                    ("elevenlabs", "ElevenLabs TTS"),
+                    ("chatterbox", "Chatterbox TTS"),
+                    ("kokoro", "Kokoro TTS"),
+                    ("fish_audio", "Fish Audio TTS"),
+                    ("voxcpm", "VoxCPM TTS"),
+                ]
 
             tts_server_values = [server_value for server_value, _ in tts_servers]
             if saved_tts_server not in tts_server_values:
-                saved_tts_server = "azure-tts-v1"
+                saved_tts_server = "kokoro" if free_only_voice else "azure-tts-v1"
 
             if tts_mode_enabled:
                 selected_tts_server = stable_selectbox(
