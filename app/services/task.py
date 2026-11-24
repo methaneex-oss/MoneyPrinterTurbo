@@ -1091,6 +1091,14 @@ def _get_material_scene_labels(task_id: str, video_paths: list[str]) -> dict[str
         return source_groups
 
 
+def _solo_stack_presenter_enabled() -> bool:
+    """Keep the recurring channel host out of ordinary MoneyPrinterTurbo videos."""
+    return bool(
+        config.app.get("solo_stack_mode", False)
+        and config.app.get("solo_stack_presenter_enabled", True)
+    )
+
+
 def generate_final_videos(
     task_id, params, downloaded_videos, audio_file, subtitle_path, audio_duration,
     *, partial_results: dict | None = None,
@@ -1196,7 +1204,7 @@ def generate_final_videos(
             video_fit_mode=params.video_fit_mode,
             video_concat_mode=video_concat_mode,
             video_transition_mode=video_transition_mode,
-            solo_stack_presenter_enabled=bool(config.app.get("solo_stack_presenter_enabled", True)),
+            solo_stack_presenter_enabled=_solo_stack_presenter_enabled(),
             presenter_direction=(
                 solo_stack_director.plan_performance(video_script, params.video_subject)
                 if bool(config.app.get("solo_stack_mode", False)) else None
