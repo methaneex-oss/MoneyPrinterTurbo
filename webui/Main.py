@@ -8399,7 +8399,19 @@ def _render_audio_settings(panel, params):
                     if saved_tts_server == voice.NO_VOICE_NAME
                     else VOICE_MODE_TTS
                 )
-            voice_mode_options = [VOICE_MODE_TTS, VOICE_MODE_UPLOAD, VOICE_MODE_NONE]
+            free_only_voice = bool(
+                config.app.get(
+                    "solo_stack_free_only", config.app.get("solo_stack_mode", False)
+                )
+            )
+            voice_mode_options = (
+                [VOICE_MODE_TTS, VOICE_MODE_UPLOAD]
+                if free_only_voice
+                else [VOICE_MODE_TTS, VOICE_MODE_UPLOAD, VOICE_MODE_NONE]
+            )
+            if free_only_voice and saved_voice_mode == VOICE_MODE_NONE:
+                saved_voice_mode = VOICE_MODE_TTS
+                _set_runtime_config("ui", "voice_mode", VOICE_MODE_TTS)
             voice_mode_labels = {
                 VOICE_MODE_TTS: tr("Automatic Voiceover"),
                 VOICE_MODE_UPLOAD: tr("Upload Voiceover"),
@@ -8418,11 +8430,6 @@ def _render_audio_settings(panel, params):
 
             # Provider 下拉只负责选择自动配音服务；无配音已经由上方模式控制，
             # 不再作为 TTS Provider 混入列表，避免两个入口表达同一状态。
-            free_only_voice = bool(
-                config.app.get(
-                    "solo_stack_free_only", config.app.get("solo_stack_mode", False)
-                )
-            )
             if free_only_voice:
                 tts_servers = [("kokoro", "Kokoro TTS (Local)")]
             else:
