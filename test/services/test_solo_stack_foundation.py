@@ -8,6 +8,7 @@ from app.services.solo_stack_assets import (
     SoloStackAssetError, add_evidence, register_asset, validate_source_url, verify_asset,
 )
 from app.services.solo_stack_presenter import BRAND, build_presenter_frame
+from app.services import task
 
 
 def test_presenter_frames_are_deterministic_and_transparent():
@@ -117,3 +118,16 @@ def test_presenter_supports_episode_specific_actions_and_wardrobes():
     smart = build_presenter_frame(0.8, expression="skeptical", action="lean", wardrobe="smart")
     assert base.size == reaction.size == smart.size
     assert len({base.tobytes(), reaction.tobytes(), smart.tobytes()}) == 3
+
+
+
+def test_solo_stack_presenter_requires_channel_mode(monkeypatch):
+    monkeypatch.setitem(task.config.app, "solo_stack_mode", False)
+    monkeypatch.setitem(task.config.app, "solo_stack_presenter_enabled", True)
+    assert task._solo_stack_presenter_enabled() is False
+
+    monkeypatch.setitem(task.config.app, "solo_stack_mode", True)
+    assert task._solo_stack_presenter_enabled() is True
+
+    monkeypatch.setitem(task.config.app, "solo_stack_presenter_enabled", False)
+    assert task._solo_stack_presenter_enabled() is False
