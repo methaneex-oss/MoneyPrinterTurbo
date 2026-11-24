@@ -6289,7 +6289,12 @@ def _render_video_settings(panel, params):
                     "Generated illustrations are not accepted as real product evidence."
                 )
                 capture_product = st.text_input(
-                    "Product name", key="solo_stack_capture_product"
+                    "Product name",
+                    key="solo_stack_capture_product",
+                    help=(
+                        "Use the supported product's exact name, for example "
+                        "ChatGPT, Claude, Notion, Canva, Grammarly, Zapier, or Cursor."
+                    ),
                 )
                 capture_type = st.selectbox(
                     "Asset type",
