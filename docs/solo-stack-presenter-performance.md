@@ -1,25 +1,24 @@
 # Solo Stack presenter performance
 
-## Runtime behavior
+## Host and acting
 
-The recurring host is rendered locally by `app/services/solo_stack_presenter.py` with Pillow. The character's visual identity and Solo Stack emblem remain stable; scene direction can vary action, expression, gaze, intensity and wardrobe.
+Stack is rendered locally as a reusable 2D character. Episode-level direction is derived from the narration and subject. Scene labels can add gesture and expression variation while preserving the episode's selected wardrobe and overall character identity. The presenter appears on alternating scenes, with short overlays, leaving intervening scenes unobstructed for real app evidence.
 
-During video composition, `app/services/video.py` places the host on alternating scene indices. Each appearance is limited to the smaller of 3.5 seconds or 46% of that scene. This intentionally leaves intervening scenes fully available for product footage, screen evidence and graphics.
+## Voice identity and delivery
 
-`app/services/solo_stack_director.py` derives the episode-level performance from the narration and subject. When a scene has a grounded label, `plan_scene_performance` derives a scene-specific direction from that label. Neutral labels receive deterministic gesture variation; labels with semantic cues can select a more specific emotional beat. The episode wardrobe and intensity are retained when scene-level direction is applied.
+The Colab preset selects one Kokoro voice ID (`am_michael`) for the channel. When Solo Stack voice performance is enabled, the Kokoro-FastAPI request uses SSML prosody-rate spans derived from sentence-level semantic cues and short inter-sentence breaks. This is deliberately restrained pacing variation, not a claim that Kokoro's SSML adapter provides arbitrary emotional acting, pitch control, or a different voice per scene. The voice ID is never changed by the director.
 
-## What this does not claim
+The SSML path uses the documented `ssml: true` and `allow_voice_tags: true` request flags. It is enabled only for the Solo Stack Kokoro path; other providers and ordinary MoneyPrinterTurbo jobs retain their existing request behavior. The Colab notebook enables the corresponding Kokoro-FastAPI server flags.
 
-- The host is a local 2D rendered character, not a fully rigged actor.
-- The current overlay is scene-aware, not phoneme-accurate lip synchronization.
-- The current TTS request path does not receive per-line emotional prosody from this presenter director.
-- The public product-image capture path does not authenticate into user accounts or demonstrate account-specific workflows.
+## Mouth animation and synchronization boundary
 
-These limitations are deliberate verification boundaries. A later speech-animation phase should use actual word/phoneme timing from the selected TTS provider, preserve the configured voice identity, and be tested against generated audio before it is described as synchronized.
+The presenter compositor decodes the narration into a compact 25 Hz RMS activity envelope. Stack's mouth opening follows that envelope on the scene timeline, so the mouth is more active during spoken audio and closes during quieter regions. This works with any narration provider and does not require another AI model.
 
-## Quality constraints
+This is **audio-reactive mouth animation**, not phoneme-accurate lip synchronization. RMS energy does not identify phonemes, syllables, or visemes, and scene offsets are estimated from the ordered clip durations. Exact lip sync would require word/phoneme timestamps and a phoneme-to-viseme mapping with verified timeline alignment. Do not describe the current behavior as phoneme-accurate.
 
-- Do not place the host over every frame; keep real app evidence legible.
-- Keep one recognizable character identity and the episode's selected voice identity.
-- Change gestures and expression in response to scene meaning rather than a fixed repeating animation playlist.
-- Do not claim a real workflow was performed unless the video contains a genuine recording of that workflow.
+## Evidence and quality constraints
+
+- Keep real app footage and genuine screen recordings readable; the host must not cover key UI evidence.
+- Do not claim that a user workflow was performed unless the video contains a genuine recording of that workflow.
+- Public product-page visuals are not authenticated account demonstrations.
+- Do not claim voice quality or acting quality is approved until a generated episode has been listened to and reviewed.
