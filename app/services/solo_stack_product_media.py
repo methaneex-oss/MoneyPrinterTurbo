@@ -182,7 +182,8 @@ _SCRIPT_SENTENCE_START_STOPWORDS = {
     "a", "an", "and", "but", "for", "here", "how", "if", "it", "now", "our",
     "so", "the", "their", "they", "this", "today", "first", "second",
     "next", "finally", "meet", "imagine", "introducing", "we", "what", "when",
-    "where", "which", "who", "why", "you", "your",
+    "where", "which", "who", "why", "you", "your", "use", "would", "can",
+    "could", "should", "does", "did", "is", "are", "do", "will", "let",
 }
 
 
@@ -258,6 +259,9 @@ def _script_named_product_candidates(text: str) -> list[str]:
 
 def identify_products(subject: str, script: str, terms=None, limit: int = 3) -> list[str]:
     """Identify episode software names without requiring a fixed catalogue."""
+    maximum = max(0, min(5, int(limit)))
+    if maximum == 0:
+        return []
     if isinstance(terms, str):
         terms = [terms]
     elif terms is None:
@@ -291,7 +295,7 @@ def identify_products(subject: str, script: str, terms=None, limit: int = 3) -> 
             item.casefold() for item in selected
         }:
             selected.append(cleaned)
-        if len(selected) >= max(0, min(5, int(limit))):
+        if len(selected) >= maximum:
             break
     return selected
 
