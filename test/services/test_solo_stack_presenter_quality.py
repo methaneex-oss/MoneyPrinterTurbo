@@ -93,9 +93,9 @@ def test_presenter_overlay_preserves_transparency_over_video():
 
     try:
         frame = composite.get_frame(0.5)
-        # The presenter's top-left overlay pixel is outside the character.
+        # The presenter's upper-left overlay pixel is outside the character.
         # It must reveal the source footage, not become an opaque black box.
-        assert tuple(frame[401, 162]) == background
+        assert tuple(frame[28, 162]) == background
     finally:
         composite.close()
 
