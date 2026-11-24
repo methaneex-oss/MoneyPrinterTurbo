@@ -211,6 +211,73 @@ def add_evidence(
     return record
 
 
+
+def verified_assets_for_products(
+    project_dir: str | Path,
+    products: list[str] | tuple[str, ...],
+) -> list[dict]:
+    """Return intact, path-safe captures for the products in this episode.
+
+    A manifest entry is only eligible when its product matches exactly (case
+    insensitive), its file remains inside the asset library, its type/extension
+    are supported, and its bytes still match the recorded SHA-256 digest.
+    Corrupt or stale individual entries are skipped rather than poisoning a
+    video-generation task.
+    """
+    project = Path(project_dir).resolve()
+    manifest = _load_manifest(project)
+    wanted = {
+        value.strip().casefold()
+        for value in products
+        if isinstance(value, str) and value.strip()
+    }
+    if not wanted:
+        return []
+
+    verified = []
+    for record in manifest["assets"]:
+        if not isinstance(record, dict):
+            continue
+        product = record.get("product")
+        if not isinstance(product, str) or product.casefold() not in wanted:
+            continue
+        if record.get("asset_type") not in {
+            "screenshot", "screen_recording", "demo_media", "logo"
+        }:
+            continue
+        relative_value = record.get("file")
+        digest = record.get("sha256")
+        if not isinstance(relative_value, str) or not isinstance(digest, str):
+            continue
+        relative = Path(relative_value)
+        if (
+            not relative.parts
+            or relative.is_absolute()
+            or ".." in relative.parts
+            or relative.parts[0] != "assets"
+        ):
+            continue
+        unresolved = project / relative
+        if unresolved.is_symlink():
+            continue
+        target = unresolved.resolve()
+        if project not in target.parents or not target.is_file():
+            continue
+        if target.suffix.lower() not in _ALLOWED:
+            continue
+        try:
+            size = target.stat().st_size
+            if size <= 0 or size > MAX_ASSET_BYTES:
+                continue
+            actual_digest = hashlib.sha256(target.read_bytes()).hexdigest()
+        except OSError:
+            continue
+        if actual_digest != digest:
+            continue
+        verified.append({**record, "path": str(target)})
+    return verified
+
+
 def verify_asset(project_dir: str | Path, asset_id: str) -> bool:
     """Verify stored asset bytes against their immutable manifest digest."""
     asset_id = _safe_name(asset_id)
