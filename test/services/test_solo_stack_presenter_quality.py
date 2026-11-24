@@ -156,7 +156,11 @@ def test_presenter_auto_placement_is_deterministic_for_uniform_scenes():
             scores[position], position[1], -position[0]
         ),
     )
-    assert selected == (360 - 110 - max(12, int(360 * 0.035)), max(12, int(640 * 0.045)))
+    expected = (
+        360 - 110 - max(12, int(360 * 0.035)),
+        max(12, int(640 * 0.045)),
+    )
+    assert selected == expected
 
 
 def test_presenter_position_is_selected_from_actual_scene_frames():
