@@ -345,3 +345,40 @@ def test_discovers_official_site_from_wikidata_without_a_product_catalogue_entry
     assert source["url"] == "https://www.freshbooks.com/"
     assert source["domain"] == "freshbooks.com"
     assert source["discovery_method"] == "wikidata_official_website_property"
+
+
+def test_discovers_unlisted_business_app_from_search_when_wikidata_has_no_match(
+    monkeypatch,
+):
+    from app.services import solo_stack_product_media
+
+    class FakeResponse:
+        def __init__(self, payload=None, text=""):
+            self.payload = payload or {}
+            self.text = text
+
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return self.payload
+
+    responses = [
+        FakeResponse({"search": []}),
+        FakeResponse(
+            text=(
+                '<a class="result__a" '
+                'href="//duckduckgo.com/l/?uddg=https%3A%2F%2Fwww.freshbooks.com%2F">'
+                "FreshBooks official accounting software</a>"
+            )
+        ),
+    ]
+
+    def fake_get(*_args, **_kwargs):
+        return responses.pop(0)
+
+    monkeypatch.setattr(solo_stack_product_media.requests, "get", fake_get)
+    source = solo_stack_product_media.discover_official_product_source("FreshBooks")
+    assert source["url"] == "https://www.freshbooks.com/"
+    assert source["domain"] == "freshbooks.com"
+    assert source["discovery_method"] == "duckduckgo_result_candidate"
