@@ -639,6 +639,14 @@ def generate_audio(
             "voice_rate": params.voice_rate,
             "voice_file": audio_file,
         }
+        if (
+            bool(config.app.get("solo_stack_mode", False))
+            and bool(config.app.get("solo_stack_voice_performance_enabled", True))
+            and voice.is_kokoro_voice(voice.parse_voice_name(params.voice_name))
+        ):
+            tts_kwargs["performance_direction"] = solo_stack_director.plan_performance(
+                video_script, params.video_subject
+            )
         if voxcpm_reference_audio is not None:
             tts_kwargs["voxcpm_reference_audio"] = voxcpm_reference_audio
         if voxcpm_prompt_audio is not None:
