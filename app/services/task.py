@@ -415,7 +415,8 @@ def _solo_stack_free_llm_error() -> str | None:
     if provider is None:
         return "Solo Stack free-only mode requires an approved free LLM provider."
     model_key = provider.config_key("model_name")
-    model_name = str(settings.get(model_key) or provider.default_model or "").strip()
+    configured_model = str(settings.get(model_key) or "").strip()
+    model_name = str(provider.resolve_model_name(configured_model) or "").strip()
     if provider_id == "openrouter" and model_name.lower().endswith(":free"):
         return None
     base_url_key = provider.config_key("base_url")
@@ -460,7 +461,7 @@ def _solo_stack_free_voice_error(params) -> str | None:
             "Solo Stack free-only mode requires the local Kokoro voice or a "
             "user-supplied audio file. No external TTS request was sent."
         )
-    base_url = config.kokoro.get("base_url", "")
+    base_url = getattr(config, "kokoro", {}).get("base_url", "")
     if not _is_loopback_http_url(base_url):
         return (
             "Solo Stack free-only mode requires Kokoro to use a loopback-local "
