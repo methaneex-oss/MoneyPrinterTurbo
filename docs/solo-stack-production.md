@@ -125,9 +125,12 @@ paid request. A blocked configuration fails with a reason rather than falling
 back to a paid service.
 
 
-For every supported product identified in the episode, the product-visual
-pipeline records operator-capture and official-page coverage in
-`script.json` and the task's product-visual manifest. A named product with no
-captured visual blocks final export; generic stock footage is not accepted as
-a substitute for showing the product. Official-page captures are labelled as
-public vendor-site visuals, not authenticated in-app recordings.
+For every supported product identified from the episode subject, script,
+or material search terms, the product-visual pipeline records operator-capture
+and official-page coverage in `script.json` and the task's product-visual
+manifest. A named product with no captured visual blocks narration/rendering;
+generic stock footage is not accepted as a substitute for showing the product.
+Missing, unreadable, or malformed coverage records fail closed when a supported
+product is named. Episodes that name no supported product do not require
+product-specific footage. Official-page captures are labelled as public
+vendor-site visuals, not authenticated in-app recordings.
