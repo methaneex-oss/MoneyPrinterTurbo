@@ -362,6 +362,26 @@ def _render_video_capture_clip(
     subprocess.run(command, check=True, capture_output=True, timeout=120)
 
 
+def _product_visual_coverage(products: list[str], assets: list[dict]) -> list[dict]:
+    coverage = []
+    for product in products:
+        product_assets = [
+            asset for asset in assets
+            if str(asset.get("product") or "").casefold() == product.casefold()
+            and str(asset.get("asset_type") or "").casefold() != "logo"
+        ]
+        coverage.append({
+            "product": product,
+            "visual_count": len(product_assets),
+            "sources": sorted({
+                str(asset.get("asset_type") or "unknown")
+                for asset in product_assets
+            }),
+            "status": "available" if product_assets else "missing",
+        })
+    return coverage
+
+
 def prepare_episode_product_visuals(
     task_id: str,
     subject: str,
@@ -601,21 +621,9 @@ def prepare_episode_product_visuals(
                 exc,
             )
 
-    product_coverage = []
-    for product in products:
-        product_assets = [
-            asset for asset in manifest["assets"]
-            if str(asset.get("product") or "").casefold() == product.casefold()
-        ]
-        product_coverage.append({
-            "product": product,
-            "visual_count": len(product_assets),
-            "sources": sorted({
-                str(asset.get("asset_type") or "unknown")
-                for asset in product_assets
-            }),
-            "status": "available" if product_assets else "missing",
-        })
+    product_coverage = _product_visual_coverage(
+        products, manifest["assets"]
+    )
     manifest["product_coverage"] = product_coverage
     manifest["missing_products"] = [
         item["product"] for item in product_coverage
