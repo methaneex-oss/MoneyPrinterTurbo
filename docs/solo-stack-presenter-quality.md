@@ -18,8 +18,11 @@ a paid service, external image dependency, or a new runtime model.
   conversion from discarding transparency and producing an opaque dark rectangle.
 - Fade each appearance in and out over a short eased interval to avoid hard pops
   at scene boundaries.
-- Alternate between the upper-left and upper-right safe zones, keeping the host
-  clear of the lower subtitle region while preserving a compact overlay size.
+- Sample three frames from each eligible scene and scan the full upper/middle
+  subtitle-safe region for a low-complexity presenter position. Placement adapts
+  to the actual footage instead of alternating fixed corners; uniform scenes use
+  a deterministic upper-right fallback. This visual heuristic is not semantic
+  object detection, so native-render review remains mandatory.
 - Add restrained jacket seam, fastener and hair-highlight details without
   changing the established character silhouette, palette, wardrobe choices,
   acting controls or public renderer signature.
@@ -36,10 +39,10 @@ a paid service, external image dependency, or a new runtime model.
 - Select alternating labelled non-evidence scenes for host appearances; skip
   product screenshots and recordings so the presenter cannot cover app controls.
 - Add regression tests for transparency, antialiased edges, deterministic output,
-  expression/action/wardrobe variation, compact overlays, partial blink states and
-  distinct curious/skeptical/thoughtful facial poses during speech, separate hand
-  gesture families, and real video
-  compositing over a non-black background to catch opaque-overlay regressions.
+  expression/action/wardrobe variation, compact overlays, partial blink states,
+  distinct facial poses during speech, separate hand gesture families, adaptive
+  placement around visually busy regions, subtitle-safe bounds, deterministic
+  fallback, and real video compositing over a non-black background.
 
 ## Quality boundary
 
