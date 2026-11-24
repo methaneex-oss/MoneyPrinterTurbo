@@ -601,29 +601,50 @@ def prepare_episode_product_visuals(
                 exc,
             )
 
+    product_coverage = []
+    for product in products:
+        product_assets = [
+            asset for asset in manifest["assets"]
+            if str(asset.get("product") or "").casefold() == product.casefold()
+        ]
+        product_coverage.append({
+            "product": product,
+            "visual_count": len(product_assets),
+            "sources": sorted({
+                str(asset.get("asset_type") or "unknown")
+                for asset in product_assets
+            }),
+            "status": "available" if product_assets else "missing",
+        })
+    manifest["product_coverage"] = product_coverage
+    manifest["missing_products"] = [
+        item["product"] for item in product_coverage
+        if item["status"] == "missing"
+    ]
     manifest_path.write_text(
         json.dumps(manifest, indent=2) + "\n", encoding="utf-8"
     )
-    if material_records:
-        script_path = task_dir / "script.json"
-        try:
-            payload = json.loads(script_path.read_text(encoding="utf-8"))
-            records = payload.setdefault("material_sources", [])
-            existing = {
-                item.get("local_file")
-                for item in records if isinstance(item, dict)
-            }
-            records.extend(
-                item for item in material_records
-                if item["local_file"] not in existing
-            )
-            script_path.write_text(
-                json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
-                encoding="utf-8",
-            )
-        except (OSError, ValueError, TypeError) as exc:
-            logger.warning(
-                "Could not add Solo Stack product visuals to source manifest: %s",
-                exc,
-            )
+    script_path = task_dir / "script.json"
+    try:
+        payload = json.loads(script_path.read_text(encoding="utf-8"))
+        payload["product_visual_coverage"] = product_coverage
+        payload["product_visual_manifest"] = str(manifest_path.relative_to(task_dir))
+        records = payload.setdefault("material_sources", [])
+        existing = {
+            item.get("local_file")
+            for item in records if isinstance(item, dict)
+        }
+        records.extend(
+            item for item in material_records
+            if item["local_file"] not in existing
+        )
+        script_path.write_text(
+            json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+    except (OSError, ValueError, TypeError) as exc:
+        logger.warning(
+            "Could not persist Solo Stack product visual coverage: %s",
+            exc,
+        )
     return clips
