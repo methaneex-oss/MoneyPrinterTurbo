@@ -804,8 +804,12 @@ def prepare_episode_product_visuals(
             logger.warning(
                 "No trustworthy official public source discovered for %s", product
             )
+    products_with_public_sources = [
+        product for product in products_needing_public_visuals
+        if source_specs.get(product)
+    ]
     sync_playwright = None
-    if products_needing_public_visuals:
+    if products_with_public_sources:
         try:
             from playwright.sync_api import sync_playwright
         except ImportError as exc:
@@ -828,7 +832,7 @@ def prepare_episode_product_visuals(
                         device_scale_factor=1,
                         locale="en-US",
                     )
-                    for product in products_needing_public_visuals:
+                    for product in products_with_public_sources:
                         remaining = _MAX_IMAGES_PER_PRODUCT - user_capture_counts.get(product, 0)
                         if remaining <= 0:
                             continue
