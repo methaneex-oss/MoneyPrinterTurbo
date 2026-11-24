@@ -60,4 +60,4 @@ def test_dynamic_visuals_are_never_product_evidence():
     # The manifest contract is explicit: these are generic supporting images,
     # not authenticated software-interface captures.
     assert "is_product_evidence" in retrieval.prepare_dynamic_scene_visuals.__doc__
-    assert "never satisfy product-evidence gates" in retrieval.prepare_dynamic_scene_visuals.__doc__
+    assert "never count as authenticated product-interface evidence" in retrieval.prepare_dynamic_scene_visuals.__doc__
