@@ -18,6 +18,8 @@ a paid service, external image dependency, or a new runtime model.
   conversion from discarding transparency and producing an opaque dark rectangle.
 - Fade each appearance in and out over a short eased interval to avoid hard pops
   at scene boundaries.
+- Alternate between the upper-left and upper-right safe zones, keeping the host
+  clear of the lower subtitle region while preserving a compact overlay size.
 - Add restrained jacket seam, fastener and hair-highlight details without
   changing the established character silhouette, palette, wardrobe choices,
   acting controls or public renderer signature.
