@@ -1360,43 +1360,82 @@ def _solo_stack_quality_blockers(quality_report: dict) -> list[str]:
 
 
 def _solo_stack_product_visual_blockers(task_id: str) -> list[str]:
-    """Block publication when a named product has no authentic visual source."""
+    """Fail closed when a named supported product lacks recorded visual coverage."""
     task_dir = Path(utils.task_dir(task_id))
     script_path = task_dir / "script.json"
     manifest_path = task_dir / "solo_stack" / "product_visuals" / "manifest.json"
-    payload = {}
-    coverage = None
     try:
-        loaded_payload = json.loads(script_path.read_text(encoding="utf-8"))
-        if isinstance(loaded_payload, dict):
-            payload = loaded_payload
-            coverage = payload.get("product_visual_coverage")
+        payload = json.loads(script_path.read_text(encoding="utf-8"))
     except (OSError, ValueError, TypeError):
-        pass
-    capture_error = (
-        payload.get("product_visual_capture_error")
-        if isinstance(payload, dict) else None
-    )
-    if capture_error:
+        return ["product_visual_coverage_unavailable"]
+    if not isinstance(payload, dict):
+        return ["product_visual_coverage_unavailable"]
+
+    if payload.get("product_visual_capture_error"):
         return ["product_visual_capture_unavailable"]
+
+    params = payload.get("params")
+    subject = (
+        params.get("video_subject", "")
+        if isinstance(params, dict)
+        else getattr(params, "video_subject", "")
+    )
+    script = str(payload.get("script") or "")
+    expected_products = solo_stack_product_media.identify_products(
+        str(subject or ""), script, limit=2
+    )
+
+    coverage = payload.get("product_visual_coverage")
     if not isinstance(coverage, list) and manifest_path.is_file():
         try:
             manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
             coverage = manifest.get("product_coverage")
         except (OSError, ValueError, TypeError):
             return ["product_visual_coverage_unavailable"]
-    if not isinstance(coverage, list):
+
+    # No supported product was named: no product-specific footage is required.
+    # If one was named, absent coverage is a hard failure rather than a silent pass.
+    if not expected_products and not isinstance(coverage, list):
         return []
-    missing = []
+    if not isinstance(coverage, list):
+        return ["product_visual_coverage_unavailable"]
+
+    by_product = {}
+    malformed = False
     for item in coverage:
         if not isinstance(item, dict):
+            malformed = True
+            continue
+        product = item.get("product")
+        if not isinstance(product, str) or not product.strip():
+            malformed = True
             continue
         try:
-            visual_count = int(item.get("visual_count") or 0)
+            visual_count = int(item.get("visual_count"))
         except (TypeError, ValueError):
-            visual_count = 0
-        if item.get("status") == "missing" or visual_count <= 0:
-            missing.append(str(item.get("product") or "unnamed product"))
+            malformed = True
+            continue
+        by_product[product.casefold()] = {
+            "visual_count": visual_count,
+            "status": item.get("status"),
+        }
+
+    if malformed:
+        return ["product_visual_coverage_unavailable"]
+
+    products_to_check = expected_products or [
+        str(item.get("product")) for item in coverage
+        if isinstance(item, dict) and isinstance(item.get("product"), str)
+    ]
+    missing = []
+    for product in products_to_check:
+        record = by_product.get(product.casefold())
+        if (
+            record is None
+            or record["visual_count"] <= 0
+            or record["status"] != "available"
+        ):
+            missing.append(product)
     return [f"missing_product_visuals:{', '.join(missing)}"] if missing else []
 
 
