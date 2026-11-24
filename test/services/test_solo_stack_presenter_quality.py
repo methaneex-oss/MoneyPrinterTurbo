@@ -157,3 +157,46 @@ def test_presenter_auto_placement_is_deterministic_for_uniform_scenes():
         ),
     )
     assert selected == (360 - 110 - max(12, int(360 * 0.035)), max(8, int(640 * 0.04)))
+
+
+def test_presenter_position_is_selected_from_actual_scene_frames():
+    from app.services.solo_stack_presenter import _choose_overlay_position
+
+    frame = np.full((640, 360, 3), 112, dtype=np.uint8)
+    yy, xx = np.indices((210, 150))
+    pattern = ((xx // 3 + yy // 3) % 2) * 220
+    frame[0:210, 210:360, :] = pattern[..., None]
+
+    class StaticScene:
+        size = (360, 640)
+        duration = 2.0
+
+        def get_frame(self, _time):
+            return frame
+
+    x, y = _choose_overlay_position(StaticScene(), (110, 180))
+    right_top = (
+        360 - 110 - max(12, int(360 * 0.035)),
+        max(12, int(640 * 0.045)),
+    )
+    assert (x, y) != right_top
+    assert y + 180 <= int(640 * 0.66)
+
+
+def test_presenter_position_samples_uniform_scene_and_uses_stable_fallback():
+    from app.services.solo_stack_presenter import _choose_overlay_position
+
+    frame = np.full((640, 360, 3), 112, dtype=np.uint8)
+
+    class StaticScene:
+        size = (360, 640)
+        duration = 2.0
+
+        def get_frame(self, _time):
+            return frame
+
+    expected = (
+        360 - 110 - max(12, int(360 * 0.035)),
+        max(12, int(640 * 0.045)),
+    )
+    assert _choose_overlay_position(StaticScene(), (110, 180)) == expected
