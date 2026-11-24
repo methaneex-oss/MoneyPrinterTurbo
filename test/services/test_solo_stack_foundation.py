@@ -53,7 +53,7 @@ def test_asset_registration_rejects_media_type_mismatch(tmp_path):
         )
 
     video = tmp_path / "capture.mp4"
-    video.write_bytes(b"\\x00\\x00\\x00\\x18ftypisom0000")
+    video.write_bytes(b"\x00\x00\x00\x18ftypisom0000")
     with pytest.raises(SoloStackAssetError, match="Video files"):
         register_asset(
             video, tmp_path / "episode", asset_id="bad-video",
