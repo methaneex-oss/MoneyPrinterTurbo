@@ -414,22 +414,37 @@ def prepare_episode_product_visuals(
         rendered_count = 0
 
         for asset_index, asset in enumerate(selected_assets, start=1):
-            source = Path(asset["path"])
-            source_host = (
-                urlparse(str(asset.get("source_url") or "")).hostname
-                or "USER-SUPPLIED CAPTURE"
-            )
-            if source.suffix.lower() in {".png", ".jpg", ".jpeg", ".webp"}:
-                card = product_dir / f"user-capture-card-{asset_index}.jpg"
-                clip = product_dir / f"{product_slug}-real-app-capture-{asset_index}.mp4"
-                _make_editorial_card(
-                    source, card, product, aspect, source_host,
-                    source_label="USER-CAPTURED APP VISUAL",
+            card = None
+            clip = None
+            try:
+                source = Path(asset["path"])
+                source_host = (
+                    urlparse(str(asset.get("source_url") or "")).hostname
+                    or "USER-SUPPLIED CAPTURE"
                 )
-                _render_still_clip(card, clip, duration, aspect)
-            else:
-                clip = product_dir / f"{product_slug}-screen-recording-{asset_index}.mp4"
-                _render_video_capture_clip(source, clip, duration, aspect)
+                if source.suffix.lower() in {".png", ".jpg", ".jpeg", ".webp"}:
+                    card = product_dir / f"user-capture-card-{asset_index}.jpg"
+                    clip = product_dir / f"{product_slug}-real-app-capture-{asset_index}.mp4"
+                    _make_editorial_card(
+                        source, card, product, aspect, source_host,
+                        source_label="USER-CAPTURED APP VISUAL",
+                    )
+                    _render_still_clip(card, clip, duration, aspect)
+                else:
+                    clip = product_dir / f"{product_slug}-screen-recording-{asset_index}.mp4"
+                    _render_video_capture_clip(source, clip, duration, aspect)
+            except Exception as exc:
+                if card is not None:
+                    card.unlink(missing_ok=True)
+                if clip is not None:
+                    clip.unlink(missing_ok=True)
+                logger.warning(
+                    "Could not render operator capture %s for %s; trying other visuals: %s",
+                    asset.get("asset_id", "unknown"),
+                    product,
+                    exc,
+                )
+                continue
 
             clips.append(str(clip))
             rendered_count += 1
