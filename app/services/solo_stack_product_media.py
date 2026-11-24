@@ -175,11 +175,13 @@ _PRODUCT_LABEL_STOPWORDS = {
 }
 _PRODUCT_GENERIC_NAMES = {
     "AI", "API", "CEO", "DIY", "FAQ", "I", "PDF", "SEO", "UI", "UX", "URL",
-    "USA", "YouTube",
+    "USA", "YouTube", "Solo Stack", "Stack", "MoneyPrinterTurbo",
+    "Money Printer Turbo",
 }
 _SCRIPT_SENTENCE_START_STOPWORDS = {
     "a", "an", "and", "but", "for", "here", "how", "if", "it", "now", "our",
-    "so", "the", "their", "they", "this", "today", "we", "what", "when",
+    "so", "the", "their", "they", "this", "today", "first", "second",
+    "next", "finally", "meet", "imagine", "introducing", "we", "what", "when",
     "where", "which", "who", "why", "you", "your",
 }
 
