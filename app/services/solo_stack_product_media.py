@@ -1,8 +1,9 @@
-"""Capture genuine public product visuals from official software websites.
+"""Build episode product visuals from verified captures and official public pages.
 
-This deliberately captures public product-page imagery only. It never logs into
-third-party accounts, fabricates interfaces, or labels marketing illustrations
-as authenticated in-app demonstrations.
+Operator-supplied screenshots and screen recordings take priority; public
+allowlisted vendor imagery fills remaining slots. This service never logs into
+third-party accounts, fabricates interfaces, or labels marketing imagery as an
+authenticated in-app demonstration.
 """
 from __future__ import annotations
 
