@@ -13,8 +13,11 @@ import logging
 import re
 import subprocess
 from datetime import datetime, timezone
+from html.parser import HTMLParser
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, quote_plus, unquote, urlparse
+
+import requests
 
 from PIL import Image, ImageDraw, ImageFont
 
@@ -164,46 +167,255 @@ _MAX_IMAGE_BYTES = 18 * 1024 * 1024
 _MAX_IMAGES_PER_PRODUCT = 2
 
 
+_PRODUCT_LABEL_STOPWORDS = {
+    "a", "an", "and", "app", "apps", "best", "business", "businesses",
+    "comparison", "compare", "for", "freelancer", "freelancers", "from",
+    "in", "of", "on", "or", "review", "small", "software", "the", "tool",
+    "tools", "versus", "vs", "with",
+}
+_PRODUCT_GENERIC_NAMES = {
+    "AI", "API", "CEO", "DIY", "FAQ", "I", "PDF", "SEO", "UI", "UX", "URL",
+    "USA", "YouTube",
+}
+
+
+def _clean_product_label(value: str) -> str:
+    value = re.sub(
+        r"^(?:compare|comparing|review|reviewing|versus|vs\.?|between)\s+",
+        "", str(value or "").strip(), flags=re.I,
+    )
+    value = re.split(
+        r"\s+(?:for|among|between|in|with|when|as)\s+",
+        value, maxsplit=1, flags=re.I,
+    )[0]
+    value = re.sub(
+        r"\s+(?:review|comparison|software|apps?|tools?)$", "",
+        value, flags=re.I,
+    )
+    value = value.strip(" \t\r\n:;,.-!?()[]{}'\"")
+    words = value.split()
+    if not words or len(words) > 4:
+        return ""
+    if all(word.casefold() in _PRODUCT_LABEL_STOPWORDS for word in words):
+        return ""
+    return value
+
+
+def _comparison_subject_products(subject: str) -> list[str]:
+    text = str(subject or "").strip()
+    patterns = (
+        r"\s+\bvs\.?\s+",
+        r"\s+\bversus\s+",
+        r"\s+\bcompared\s+with\s+",
+        r"\s+\bagainst\s+",
+        r"^\s*between\s+(.+?)\s+\band\b\s+(.+?)\s*$",
+    )
+    pieces = None
+    for pattern in patterns:
+        match = re.search(pattern, text, flags=re.I)
+        if match:
+            if pattern.startswith("^"):
+                pieces = [match.group(1), match.group(2)]
+            else:
+                pieces = re.split(pattern, text, maxsplit=1, flags=re.I)
+            break
+    if not pieces:
+        return []
+    labels = [_clean_product_label(piece) for piece in pieces]
+    return list(dict.fromkeys(label for label in labels if label))
+
+
+def _script_named_product_candidates(text: str) -> list[str]:
+    """Conservative, dependency-free candidate extraction for named software."""
+    candidates = []
+    for sentence_match in re.finditer(r"[^.!?\n]+", str(text or "")):
+        sentence = sentence_match.group(0)
+        patterns = (
+            r"(?<![A-Za-z0-9])(?:[A-Z][A-Za-z0-9.+#-]*)(?:\s+[A-Z][A-Za-z0-9.+#-]*){0,2}",
+            r"(?<![A-Za-z0-9])[a-z][a-z0-9-]*\.(?:com|io|app|ai|co|org)(?![A-Za-z0-9])",
+            r"(?<![A-Za-z0-9])(?:n\d+n)(?![A-Za-z0-9])",
+        )
+        for pattern in patterns:
+            for match in re.finditer(pattern, sentence):
+                label = _clean_product_label(match.group(0))
+                if not label or label.upper() in _PRODUCT_GENERIC_NAMES:
+                    continue
+                if match.start() == 0:
+                    continue
+                candidates.append((sentence_match.start() + match.start(), label))
+    candidates.sort(key=lambda item: item[0])
+    return list(dict.fromkeys(label for _, label in candidates))
+
+
 def identify_products(subject: str, script: str, terms=None, limit: int = 3) -> list[str]:
-    """Return supported products actually named in the episode, in mention order."""
+    """Identify episode software names without requiring a fixed catalogue."""
     if isinstance(terms, str):
         terms = [terms]
     elif terms is None:
         terms = []
-    text = " ".join([subject or "", script or "", *terms]).casefold()
+    text = " ".join([subject or "", script or "", *[str(term) for term in terms]])
     candidates = []
+    # Curated aliases improve precision but never limit discovery to known apps.
     for name, item in PRODUCTS.items():
         for alias in item["aliases"]:
             pattern = re.compile(
-                r"(?<![a-z0-9])" + re.escape(alias.casefold()) + r"(?![a-z0-9])"
+                r"(?<![a-z0-9])" + re.escape(alias.casefold()) + r"(?![a-z0-9])",
+                re.I,
             )
-            for match in pattern.finditer(text):
-                candidates.append((
-                    match.start(), match.end(), -len(alias), name, alias.casefold()
-                ))
+            match = pattern.search(text)
+            if match:
+                candidates.append((match.start(), name))
+    # Comparison titles explicitly identify the intended products.
+    for index, name in enumerate(_comparison_subject_products(subject)):
+        candidates.append((-100 + index, name))
+    # Generated script/search terms can introduce products absent from the title.
+    for name in _script_named_product_candidates(
+        " ".join([script or "", *[str(term) for term in terms]])
+    ):
+        position = text.casefold().find(name.casefold())
+        candidates.append((position if position >= 0 else len(text), name))
 
     selected = []
-    selected_spans = []
-    for start, end, _specificity, name, alias in sorted(
-        candidates,
-        key=lambda item: (item[0], item[2], item[1], item[3]),
-    ):
-        # A broad product alias must not shadow a more specific name at the
-        # same location (Claude Code should not consume a separate Claude slot).
-        contained = any(
-            other_name != name
-            and other_start <= start
-            and end <= other_end
-            for other_start, other_end, other_name in selected_spans
-        )
-        if contained:
+    for _position, name in sorted(candidates, key=lambda item: item[0]):
+        cleaned = _clean_product_label(name)
+        if cleaned and cleaned.casefold() not in {
+            item.casefold() for item in selected
+        }:
+            selected.append(cleaned)
+        if len(selected) >= max(0, min(5, int(limit))):
+            break
+    return selected
+
+
+class _DuckDuckGoResultParser(HTMLParser):
+    def __init__(self):
+        super().__init__()
+        self.results = []
+        self._active = None
+
+    def handle_starttag(self, tag, attrs):
+        attributes = dict(attrs)
+        classes = set(attributes.get("class", "").split())
+        if tag == "a" and "result__a" in classes:
+            self._active = {"href": attributes.get("href", ""), "title": ""}
+
+    def handle_data(self, data):
+        if self._active is not None:
+            self._active["title"] += data
+
+    def handle_endtag(self, tag):
+        if tag == "a" and self._active is not None:
+            self.results.append(self._active)
+            self._active = None
+
+
+_BLOCKED_DISCOVERY_HOSTS = {
+    "facebook.com", "instagram.com", "linkedin.com", "pinterest.com",
+    "reddit.com", "tiktok.com", "wikipedia.org", "x.com", "youtube.com",
+}
+
+
+def _official_source_from_wikidata(product: str) -> dict | None:
+    headers = {"User-Agent": "SoloStackVisualResearch/1.0 (public source discovery)"}
+    response = requests.get(
+        "https://www.wikidata.org/w/api.php",
+        params={
+            "action": "wbsearchentities", "search": product, "language": "en",
+            "format": "json", "type": "item", "limit": 6,
+        },
+        headers=headers, timeout=(8, 18),
+    )
+    response.raise_for_status()
+    results = response.json().get("search", [])
+    for result in results:
+        label = str(result.get("label") or "").strip()
+        if label.casefold() != product.casefold():
             continue
-        if name not in selected:
-            selected.append(name)
-        # Retain every matched span, including later mentions of a product
-        # already selected, so nested broad aliases stay suppressed as well.
-        selected_spans.append((start, end, name))
-    return selected[:max(0, min(5, limit))]
+        entity_id = result.get("id")
+        if not entity_id:
+            continue
+        entity_response = requests.get(
+            "https://www.wikidata.org/w/api.php",
+            params={
+                "action": "wbgetentities", "ids": entity_id,
+                "props": "claims", "format": "json",
+            },
+            headers=headers, timeout=(8, 18),
+        )
+        entity_response.raise_for_status()
+        entity = entity_response.json().get("entities", {}).get(entity_id, {})
+        for claim in entity.get("claims", {}).get("P856", []):
+            value = claim.get("mainsnak", {}).get("datavalue", {}).get("value")
+            if isinstance(value, str):
+                parsed = urlparse(value)
+                if parsed.scheme == "https" and parsed.hostname:
+                    return {
+                        "url": value,
+                        "domain": parsed.hostname.casefold(),
+                        "discovery_method": "wikidata_official_website_property",
+                        "entity_label": label,
+                    }
+    return None
+
+
+def _official_source_from_search(product: str) -> dict | None:
+    query = quote_plus(f"{product} official website software app")
+    response = requests.get(
+        f"https://html.duckduckgo.com/html/?q={query}",
+        headers={"User-Agent": "Mozilla/5.0 (compatible; SoloStackVisualResearch/1.0)"},
+        timeout=(8, 18),
+    )
+    response.raise_for_status()
+    parser = _DuckDuckGoResultParser()
+    parser.feed(response.text)
+    product_tokens = {
+        token.casefold() for token in re.findall(r"[a-z0-9]+", product)
+        if len(token) > 1
+    }
+    for result in parser.results:
+        href = unquote(str(result.get("href") or ""))
+        parsed = urlparse(href)
+        if "duckduckgo.com" in (parsed.hostname or ""):
+            target = parse_qs(parsed.query).get("uddg", [])
+            href = target[0] if target else ""
+            parsed = urlparse(href)
+        host = (parsed.hostname or "").casefold()
+        if parsed.scheme != "https" or not host:
+            continue
+        if any(
+            host == blocked or host.endswith("." + blocked)
+            for blocked in _BLOCKED_DISCOVERY_HOSTS
+        ):
+            continue
+        title = str(result.get("title") or "").casefold()
+        host_label = host.removeprefix("www.").split(".")[0].replace("-", " ")
+        haystack = title + " " + host_label
+        overlap = sum(1 for token in product_tokens if token in haystack)
+        if product_tokens and overlap / len(product_tokens) < 0.5:
+            continue
+        return {
+            "url": href,
+            "domain": host,
+            "discovery_method": "duckduckgo_result_candidate",
+            "entity_label": product,
+        }
+    return None
+
+
+def discover_official_product_source(product: str) -> dict | None:
+    """Resolve an episode product's public official site at runtime."""
+    try:
+        source = _official_source_from_wikidata(product)
+        if source:
+            return source
+    except (requests.RequestException, ValueError, TypeError, KeyError) as exc:
+        logger.debug("Wikidata discovery failed for %s: %s", product, exc)
+    try:
+        return _official_source_from_search(product)
+    except (requests.RequestException, ValueError, TypeError) as exc:
+        logger.warning("Official-source discovery failed for %s: %s", product, exc)
+        return None
+
 
 def interleave_product_visuals(existing_clips: list[str], product_clips: list[str]) -> list[str]:
     """Distribute product evidence clips through the existing episode timeline."""
