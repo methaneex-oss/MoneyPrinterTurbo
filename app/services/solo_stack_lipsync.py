@@ -7,11 +7,16 @@ from __future__ import annotations
 import numpy as np
 from pydub import AudioSegment
 
+from app.utils import utils
+
 
 def build_audio_activity_envelope(audio_path: str, frame_rate: int = 25) -> list[float]:
     """Decode narration to a compact, normalized RMS activity envelope."""
     if not audio_path or frame_rate < 1:
         return []
+    ffmpeg_binary = utils.get_ffmpeg_binary()
+    if ffmpeg_binary:
+        AudioSegment.converter = ffmpeg_binary
     audio = AudioSegment.from_file(audio_path).set_channels(1).set_frame_rate(8000).set_sample_width(2)
     samples = np.frombuffer(audio.raw_data, dtype="<i2").astype(np.float32) / 32768.0
     if samples.size == 0:
