@@ -1238,7 +1238,7 @@ def combine_videos(
                     clip,
                     expression="talk",
                     acting_direction=scene_direction,
-                    corner="right" if index % 2 == 0 else "left",
+                    corner="auto",
                     max_duration=3.5,
                     duration_fraction=0.46,
                     audio_activity=audio_activity,
