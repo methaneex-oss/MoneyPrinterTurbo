@@ -3576,6 +3576,16 @@ def _render_general_settings(settings):
         _set_runtime_config("app", "video_source", "pixabay")
         available_groups = _available_video_source_groups(settings)
     configured = _general_provider_readiness(settings)
+    if (
+        bool(settings.get("solo_stack_mode", False))
+        and bool(settings.get("solo_stack_free_only", True))
+    ):
+        st.caption(
+            "Solo Stack free-only policy: Pixabay, user media and a warmed local "
+            "image server are available for visuals; paid video/image providers "
+            "are hidden. Script generation requires an OpenRouter :free model "
+            "or local Ollama, and narration requires local Kokoro."
+        )
     material_labels = _material_provider_labels()
     llm_labels = {
         provider.provider_id: get_llm_provider_label(provider)
