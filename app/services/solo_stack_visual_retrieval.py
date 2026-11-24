@@ -212,10 +212,28 @@ def _commons_search(query: str, cache_dir: Path) -> list[dict]:
 
 def _candidate_score(query: str, item: dict) -> int:
     query_terms = set(_tokens(query))
-    candidate_terms = set(_tokens(
-        " ".join(str(item.get(key) or "") for key in ("title", "tags", "source_url"))
-    ))
+    candidate_text = " ".join(
+        str(item.get(key) or "") for key in ("title", "tags", "source_url")
+    )
+    candidate_terms = set(_tokens(candidate_text))
     return len(query_terms & candidate_terms)
+
+
+def _license_is_usable(item: dict) -> bool:
+    """Only use sources with a known licence suitable for edited video."""
+    if item.get("provider") == "pixabay":
+        return True
+    license_name = str(item.get("license") or "").casefold()
+    if any(marker in license_name for marker in ("noncommercial", "non-commercial", "cc by-nd")):
+        return False
+    return (
+        "public domain" in license_name
+        or "cc0" in license_name
+        or "cc by 4.0" in license_name
+        or "cc-by-4.0" in license_name
+        or "cc by-sa 4.0" in license_name
+        or "cc-by-sa-4.0" in license_name
+    )
 
 
 def _download_image(item: dict, destination: Path) -> Path | None:
@@ -309,7 +327,7 @@ def prepare_dynamic_scene_visuals(
     duration: float = 3.5,
     max_scenes: int = _MAX_SCENES,
 ) -> list[str]:
-    """Find supporting stills; mark them is_product_evidence=false, never authenticated UI."""
+    """Find supporting stills; mark them non-evidence, never authenticated product UI."""
     from app.services.material import get_api_key
     from app.utils import utils
 
@@ -342,6 +360,10 @@ def prepare_dynamic_scene_visuals(
                     "Solo Stack dynamic visual search unavailable (%s): %s",
                     type(exc).__name__, query[:80],
                 )
+        candidates = [
+            item for item in candidates
+            if _license_is_usable(item) and _candidate_score(query, item) > 0
+        ]
         candidates = sorted(
             candidates,
             key=lambda item: (-_candidate_score(query, item), item.get("provider", "")),
