@@ -5,8 +5,14 @@ from PIL import Image
 from app.services.solo_stack_product_media import (
     PRODUCTS,
     _make_editorial_card,
+    _render_video_capture_clip,
     identify_products,
     interleave_product_visuals,
+    prepare_episode_product_visuals,
+)
+from app.services.solo_stack_assets import (
+    register_asset,
+    verified_assets_for_products,
 )
 
 
@@ -95,3 +101,110 @@ def test_scene_performance_uses_semantic_cues_when_present():
     result = plan_scene_performance("Hidden pricing and expensive plan", 2, {})
     assert result["emotion"] == "skeptical"
     assert result["action"] == "lean"
+
+
+
+def test_verified_asset_lookup_filters_products_and_detects_tampering(tmp_path):
+    library = tmp_path / "solo_stack"
+    source = tmp_path / "chatgpt.png"
+    Image.new("RGB", (24, 24), "#46D3E7").save(source)
+    register_asset(
+        source, library, asset_id="chatgpt-screen", product="ChatGPT",
+        asset_type="screenshot",
+    )
+
+    matching = verified_assets_for_products(library, ["chatgpt"])
+    assert len(matching) == 1
+    assert matching[0]["asset_id"] == "chatgpt-screen"
+    assert Path(matching[0]["path"]).is_file()
+
+    Path(matching[0]["path"]).write_bytes(b"tampered")
+    assert verified_assets_for_products(library, ["ChatGPT"]) == []
+
+
+def test_episode_uses_verified_operator_captures_without_launching_browser(tmp_path, monkeypatch):
+    from app.utils import utils
+
+    task_dir = tmp_path / "task"
+    task_dir.mkdir()
+    (task_dir / "script.json").write_text(
+        '{"script":"We will demonstrate ChatGPT."}', encoding="utf-8"
+    )
+    library = tmp_path / "solo_stack"
+    source_a = tmp_path / "chatgpt-a.png"
+    source_b = tmp_path / "chatgpt-b.png"
+    Image.new("RGB", (32, 24), "#46D3E7").save(source_a)
+    Image.new("RGB", (32, 24), "#FF8963").save(source_b)
+    register_asset(
+        source_a, library, asset_id="chatgpt-a", product="ChatGPT",
+        asset_type="screenshot",
+    )
+    register_asset(
+        source_b, library, asset_id="chatgpt-b", product="ChatGPT",
+        asset_type="screenshot",
+    )
+
+    monkeypatch.setattr(utils, "task_dir", lambda _task_id: str(task_dir))
+    monkeypatch.setattr(utils, "storage_dir", lambda *_parts: str(library))
+
+    def fake_card(_source, output, *_args, **_kwargs):
+        output.write_bytes(b"editorial-card")
+
+    def fake_still(_source, output, *_args, **_kwargs):
+        output.write_bytes(b"rendered-video")
+
+    monkeypatch.setattr(
+        "app.services.solo_stack_product_media._make_editorial_card", fake_card
+    )
+    monkeypatch.setattr(
+        "app.services.solo_stack_product_media._render_still_clip", fake_still
+    )
+
+    clips = prepare_episode_product_visuals(
+        task_id="task-1",
+        subject="ChatGPT review",
+        script="We will demonstrate ChatGPT.",
+        aspect="9:16",
+        duration=4,
+        max_products=1,
+    )
+
+    assert len(clips) == 2
+    assert all(Path(clip).is_file() for clip in clips)
+    manifest = json.loads(
+        (task_dir / "solo_stack" / "product_visuals" / "manifest.json").read_text()
+    )
+    assert [item["asset_type"] for item in manifest["assets"]] == [
+        "operator_capture", "operator_capture"
+    ]
+    task_manifest = json.loads((task_dir / "script.json").read_text())
+    assert len(task_manifest["material_sources"]) == 2
+    assert all(
+        "real app screen capture" in item["search_term"]
+        for item in task_manifest["material_sources"]
+    )
+
+
+def test_screen_recording_normalizer_preserves_aspect_and_drops_source_audio(tmp_path, monkeypatch):
+    from app.services import solo_stack_product_media
+
+    source = tmp_path / "screen-recording.mp4"
+    output = tmp_path / "normalized.mp4"
+    source.write_bytes(b"input")
+    captured = {}
+
+    def fake_run(command, **kwargs):
+        captured["command"] = command
+        captured["kwargs"] = kwargs
+        output.write_bytes(b"normalized")
+
+    monkeypatch.setattr(solo_stack_product_media.subprocess, "run", fake_run)
+    _render_video_capture_clip(source, output, 4, "9:16")
+
+    command = captured["command"]
+    filter_value = command[command.index("-vf") + 1]
+    assert "scale=1080:1920:force_original_aspect_ratio=decrease" in filter_value
+    assert "pad=1080:1920" in filter_value
+    assert "-map" in command and "0:v:0" in command
+    assert "-an" in command
+    assert output.is_file()
