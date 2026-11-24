@@ -2494,7 +2494,7 @@ def _run_pipeline(
                 terms=video_terms,
                 aspect=getattr(params.video_aspect, "value", params.video_aspect),
                 duration=max(3.0, min(6.0, float(params.video_clip_duration or 4))),
-                max_products=2,
+                max_products=3,
             )
             if product_visual_clips:
                 downloaded_videos = solo_stack_product_media.interleave_product_visuals(
