@@ -20,6 +20,8 @@ def test_colab_notebook_tracks_active_branch_and_persists_task_state():
     assert "/content/drive/MyDrive/MoneyPrinterTurbo/task-state" in config_cell
 
     assert "app['enable_redis'] = False" in config_cell
+    assert "app['solo_stack_mode'] = True" in config_cell
+    assert "app['solo_stack_free_only'] = True" in config_cell
 
 
 def test_colab_task_migration_merges_and_verifies_before_removing_local_data():
@@ -62,6 +64,9 @@ def test_colab_local_ai_image_setup_is_syntax_valid_and_has_safe_fallback():
     nested_script = nested_script.replace(
         '{source == "animatediff"!r}', repr(False)
     )
+    nested_script = nested_script.replace(
+        '{source == "openai_image"!r}', repr(True)
+    )
     nested_script = nested_script.replace("{{", "{").replace("}}", "}")
     ast.parse(nested_script)
     assert "gpu_memory_gib < 8" in image_cell
@@ -83,6 +88,7 @@ def test_colab_local_ai_image_setup_is_syntax_valid_and_has_safe_fallback():
     assert 'path = root / "config.toml"' in image_cell
     assert "os.replace(temporary_path, path)" in image_cell
     assert 'app["allow_unverified_animatediff"] = {source == "animatediff"!r}' in image_cell
+    assert 'app["solo_stack_local_image_ready"] = {source == "openai_image"!r}' in image_cell
     assert 'path = Path("config.toml")' not in image_cell
     assert image_cell.index("warmup_request") < image_cell.rindex('set_video_source(\n            "openai_image"')
 
