@@ -98,3 +98,28 @@ silent/invalid audio, an audio/video duration mismatch, or the wrong output
 aspect ratio. Other visual diagnostics remain warnings. A clean technical report
 still cannot prove voice quality, app-interface legibility, factual accuracy or
 good editing. The full MP4 requires a human watch/listen pass.
+
+
+## Free-only execution policy
+
+The Colab preset enables `solo_stack_free_only`. Before any provider request,
+the task layer enforces these constraints:
+
+- Script and search-term generation: OpenRouter models whose effective model ID
+  ends in `:free`, or a loopback-local Ollama endpoint. Paid LLM selections are
+  rejected before the request.
+- Narration: loopback-local Kokoro only, unless the operator supplies an audio
+  file. Paid TTS selections are rejected before the request.
+- Visual sources: Pixabay, operator-supplied local media, or the warmed
+  loopback-local image server. External OpenAI-compatible image endpoints and
+  paid video providers are rejected.
+- TwelveLabs term reranking is skipped in free-only mode.
+- Sonilo and ElevenLabs music generation is blocked when it would make a
+  provider request. The default local/random BGM path remains available.
+- SD-Turbo commercial use stays opt-in pending Stability AI registration;
+  AnimateDiff stays hidden/blocked until its weight license is reviewed.
+
+The WebUI hides incompatible visual providers, and the task layer repeats the
+checks so a stale or manually edited configuration cannot silently trigger a
+paid request. A blocked configuration fails with a reason rather than falling
+back to a paid service.
