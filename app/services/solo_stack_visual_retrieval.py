@@ -224,7 +224,11 @@ def _license_is_usable(item: dict) -> bool:
     if item.get("provider") == "pixabay":
         return True
     license_name = str(item.get("license") or "").casefold()
-    if any(marker in license_name for marker in ("noncommercial", "non-commercial", "cc by-nd")):
+    restricted_markers = (
+        "noncommercial", "non-commercial", "cc by-nd", "cc-by-nd",
+        "cc by-nc", "cc-by-nc",
+    )
+    if any(marker in license_name for marker in restricted_markers):
         return False
     return (
         "public domain" in license_name
@@ -327,7 +331,7 @@ def prepare_dynamic_scene_visuals(
     duration: float = 3.5,
     max_scenes: int = _MAX_SCENES,
 ) -> list[str]:
-    """Find supporting stills; mark them non-evidence, never authenticated product UI."""
+    """Find supporting stills; mark non-evidence, never authenticated product UI."""
     from app.services.material import get_api_key
     from app.utils import utils
 
