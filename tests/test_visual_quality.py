@@ -5,7 +5,6 @@ from app.services.visual_quality import (
     inspect_video_quality,
 )
 
-
 def test_frame_metrics_returns_bounded_fingerprint_and_pixel_statistics():
     import numpy as np
 
@@ -18,7 +17,6 @@ def test_frame_metrics_returns_bounded_fingerprint_and_pixel_statistics():
     assert edge_activity > 0
     assert 0 <= fingerprint < (1 << 64)
 
-
 def test_uniform_black_frame_is_low_detail():
     import numpy as np
 
@@ -29,7 +27,6 @@ def test_uniform_black_frame_is_low_detail():
     assert contrast == 0
     assert edge_activity == 0
 
-
 def test_perceptual_hash_does_not_treat_black_and_white_as_duplicates():
     from app.services.visual_quality import _frames_are_near_duplicates
     import numpy as np
@@ -39,13 +36,13 @@ def test_perceptual_hash_does_not_treat_black_and_white_as_duplicates():
     assert not _frames_are_near_duplicates(black, white)
     assert _frames_are_near_duplicates(black, black)
 
-
-
 def test_aspect_ratio_parser_accepts_video_aspect_enum_values():
+    from app.models.schema import VideoAspect
+
+    assert _parse_aspect_ratio(VideoAspect.portrait) == 9 / 16
     assert _parse_aspect_ratio("9:16") == 9 / 16
     assert _parse_aspect_ratio((1, 1)) == 1.0
     assert _parse_aspect_ratio("invalid") is None
-
 
 def test_audio_peak_sampler_detects_real_signal_and_missing_audio():
     import numpy as np
@@ -58,8 +55,6 @@ def test_audio_peak_sampler_detects_real_signal_and_missing_audio():
 
     assert _sample_audio_peak(FakeAudio(), sample_count=4) == 0.5
     assert _sample_audio_peak(None) is None
-
-
 
 def test_final_video_inspection_reports_vertical_frame_and_audio(tmp_path):
     import numpy as np
