@@ -210,23 +210,32 @@ def _download_image(item: dict, destination: Path) -> Path | None:
         if parsed.scheme != "https" or parsed.hostname not in _ALLOWED_IMAGE_HOSTS:
             return None
         response = requests.get(str(url), stream=True, timeout=(10, 30))
-        response.raise_for_status()
-        content_type = response.headers.get("content-type", "").split(";", 1)[0].lower()
-        if not content_type.startswith("image/"):
-            return None
-        chunks, size = [], 0
-        for chunk in response.iter_content(64 * 1024):
-            if not chunk:
-                continue
-            size += len(chunk)
-            if size > _MAX_DOWNLOAD_BYTES:
+        try:
+            response.raise_for_status()
+            content_type = response.headers.get("content-type", "").split(";", 1)[0].lower()
+            if not content_type.startswith("image/"):
                 return None
-            chunks.append(chunk)
-        body = b"".join(chunks)
-        if not body:
+            chunks, size = [], 0
+            for chunk in response.iter_content(64 * 1024):
+                if not chunk:
+                    continue
+                size += len(chunk)
+                if size > _MAX_DOWNLOAD_BYTES:
+                    return None
+                chunks.append(chunk)
+            body = b"".join(chunks)
+            if not body:
+                return None
+        finally:
+            response.close()
+        with Image.open(__import__("io").BytesIO(body)) as image:
+            image_format = image.format
+            image.verify()
+        extension = {"JPEG": ".jpg", "PNG": ".png", "WEBP": ".webp"}.get(image_format)
+        if not extension:
             return None
         destination.parent.mkdir(parents=True, exist_ok=True)
-        target = destination
+        target = destination.with_suffix(extension)
         target.write_bytes(body)
         with Image.open(target) as image:
             image.verify()
