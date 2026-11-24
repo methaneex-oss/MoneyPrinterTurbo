@@ -222,7 +222,13 @@ def _download_image(item: dict, destination: Path) -> Path | None:
     url = item.get("image_url")
     try:
         parsed = urlparse(str(url or ""))
-        if parsed.scheme != "https" or parsed.hostname not in _ALLOWED_IMAGE_HOSTS:
+        if (
+            parsed.scheme != "https"
+            or parsed.hostname not in _ALLOWED_IMAGE_HOSTS
+            or parsed.username is not None
+            or parsed.password is not None
+            or (parsed.port is not None and parsed.port != 443)
+        ):
             return None
         response = requests.get(str(url), stream=True, timeout=(10, 30))
         try:
@@ -245,6 +251,12 @@ def _download_image(item: dict, destination: Path) -> Path | None:
         finally:
             response.close()
         with Image.open(io.BytesIO(body)) as image:
+            if (
+                image.width < 320
+                or image.height < 180
+                or image.width * image.height > 40_000_000
+            ):
+                return None
             image_format = image.format
             image.verify()
         extension = {"JPEG": ".jpg", "PNG": ".png", "WEBP": ".webp"}.get(image_format)
@@ -253,8 +265,6 @@ def _download_image(item: dict, destination: Path) -> Path | None:
         destination.parent.mkdir(parents=True, exist_ok=True)
         target = destination.with_suffix(extension)
         target.write_bytes(body)
-        with Image.open(target) as image:
-            image.verify()
         return target
     except (OSError, ValueError, requests.RequestException) as exc:
         logger.debug(
