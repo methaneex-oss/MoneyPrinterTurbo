@@ -1721,10 +1721,15 @@ def generate_final_videos(
                     "Solo Stack final render could not pass technical inspection: "
                     f"{exc}"
                 ) from exc
-            warnings.append({
-                "code": "visual_quality_inspection_unavailable",
-                "video_index": index,
-            })
+            # A mocked/failed encoder may leave no file at all. Do not add a
+            # second generic warning for that missing output; the generation
+            # result already reports the primary failure. Existing generic-job
+            # outputs still receive a non-blocking inspection warning.
+            if os.path.isfile(final_video_path):
+                warnings.append({
+                    "code": "visual_quality_inspection_unavailable",
+                    "video_index": index,
+                })
         else:
             quality_report["video_index"] = index
             visual_quality_reports.append(quality_report)
