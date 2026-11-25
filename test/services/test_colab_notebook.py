@@ -155,3 +155,19 @@ def test_colab_kokoro_setup_is_syntax_valid_and_persists_config_to_drive():
     assert "5abb01e2403b072bf03d04fde160443e209d7a0dad49a423be15196b9b43c17f" in kokoro_cell
     assert "quarantine-" in kokoro_cell
     assert "for chunk in iter(lambda: handle.read(1024 * 1024), b\"\")" in kokoro_cell
+
+
+def test_colab_kokoro_diagnostics_cell_is_syntax_valid_and_reports_failure_evidence():
+    notebook_path = Path(__file__).resolve().parents[2] / "docs" / "MoneyPrinterTurbo.ipynb"
+    notebook = json.loads(notebook_path.read_text(encoding="utf-8"))
+    diagnostic_cell = next(
+        cell for cell in notebook["cells"]
+        if cell.get("cell_type") == "code"
+        and cell.get("metadata", {}).get("id") == "solo-stack-kokoro-diagnostics"
+    )
+    source = "".join(diagnostic_cell.get("source", []))
+    ast.parse(source)
+    assert "/content/kokoro-fastapi.log" in source
+    assert "splitlines()[-120:]" in source
+    assert "127.0.0.1:8880/v1/audio/voices" in source
+    assert "API keys" in source or "api keys" in source.lower()
