@@ -171,7 +171,7 @@ _PRODUCT_LABEL_STOPWORDS = {
     "a", "an", "and", "app", "apps", "best", "business", "businesses",
     "comparison", "compare", "for", "freelancer", "freelancers", "from",
     "in", "of", "on", "or", "review", "small", "software", "the", "tool",
-    "tools", "versus", "vs", "with",
+    "tools", "versus", "vs", "with", "use",
 }
 _PRODUCT_GENERIC_NAMES = {
     "AI", "API", "CEO", "DIY", "FAQ", "I", "PDF", "SEO", "UI", "UX", "URL",
@@ -205,6 +205,10 @@ def _clean_product_label(value: str) -> str:
     )
     value = value.strip(" \t\r\n:;,.-!?()[]{}'\"")
     words = value.split()
+    # Strip sentence-leading verbs that generic extraction may capture.
+    while words and words[0].casefold() in _SCRIPT_SENTENCE_START_STOPWORDS:
+        words.pop(0)
+    value = " ".join(words)
     if not words or len(words) > 4:
         return ""
     if all(word.casefold() in _PRODUCT_LABEL_STOPWORDS for word in words):
@@ -284,10 +288,21 @@ def identify_products(subject: str, script: str, terms=None, limit: int = 3) -> 
     # Comparison titles explicitly identify the intended products.
     for index, name in enumerate(_comparison_subject_products(subject)):
         candidates.append((-100 + index, name))
-    # Generated script/search terms can introduce products absent from the title.
-    for name in _script_named_product_candidates(
+    # Generic capitalized-phrase extraction can span multiple catalogued
+    # names (e.g. "Canva AI ChatGPT"). Drop those compound candidates; the
+    # catalog alias matches already preserve the individual names and order.
+    generic_candidates = _script_named_product_candidates(
         " ".join([script or "", *[str(term) for term in terms]])
-    ):
+    )
+    for name in generic_candidates:
+        if any(
+            re.search(
+                r"(?<![a-z0-9])" + re.escape(alias.casefold()) + r"(?![a-z0-9])",
+                name.casefold(),
+            )
+            for item in PRODUCTS.values() for alias in item["aliases"]
+        ):
+            continue
         position = text.casefold().find(name.casefold())
         candidates.append((position if position >= 0 else len(text), name))
 
