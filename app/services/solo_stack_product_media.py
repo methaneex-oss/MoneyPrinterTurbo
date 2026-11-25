@@ -276,6 +276,7 @@ def identify_products(subject: str, script: str, terms=None, limit: int = 3) -> 
     text = " ".join([subject or "", script or "", *[str(term) for term in terms]])
     candidates = []
     # Curated aliases improve precision but never limit discovery to known apps.
+    catalog_matches = []
     for name, item in PRODUCTS.items():
         for alias in item["aliases"]:
             pattern = re.compile(
@@ -284,7 +285,16 @@ def identify_products(subject: str, script: str, terms=None, limit: int = 3) -> 
             )
             match = pattern.search(text)
             if match:
-                candidates.append((match.start(), name))
+                catalog_matches.append((match.start(), match.end(), name, len(alias)))
+    # Prefer a full branded name over a shorter alias contained in it
+    # ("Claude Code" should not also be emitted as "Claude").
+    for start, end, name, alias_length in catalog_matches:
+        if any(
+            other_start <= start and other_end >= end and other_length > alias_length
+            for other_start, other_end, _other_name, other_length in catalog_matches
+        ):
+            continue
+        candidates.append((start, name))
     # Comparison titles explicitly identify the intended products.
     for index, name in enumerate(_comparison_subject_products(subject)):
         candidates.append((-100 + index, name))
