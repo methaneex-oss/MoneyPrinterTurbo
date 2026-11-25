@@ -119,7 +119,8 @@ def test_colab_animatediff_setup_is_syntax_valid_and_isolated():
     assert "vram_gib < 12" in video_cell
     assert "free_disk_gib < 16" in video_cell
     assert "server.py" in video_cell
-    assert "MODEL_CACHE = DRIVE_ROOT" in video_cell\n    assert "model-cache" in video_cell\n    assert "huggingface" in video_cell
+    assert "MODEL_CACHE = DRIVE_ROOT" in video_cell
+    assert "model-cache" in video_cell\n    assert "huggingface" in video_cell
     assert "set_video_source('animatediff')" in video_cell
     assert "restore_local_image_source" in video_cell
     assert "No paid fallback" in video_cell
