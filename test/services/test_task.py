@@ -109,7 +109,7 @@ class TestTaskService(unittest.TestCase):
         }]
 
         with (
-            patch.dict(tm.config.app, {"solo_stack_mode": True}),
+            patch.dict(tm.config.app, {"solo_stack_mode": True, "solo_stack_free_only": False}),
             patch.object(tm, "_solo_stack_evidence_records", return_value=evidence),
             patch.object(
                 tm.llm, "generate_script", return_value="A valid generated script."
