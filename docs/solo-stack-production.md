@@ -184,3 +184,26 @@ Pixabay's API documentation requires 24-hour response caching and prohibits
 permanent hotlinking; it also requests source attribution in search-result
 surfaces. The implementation downloads the selected asset and preserves
 attribution metadata for editorial use.
+
+
+## Release execution record (2026-11-25)
+
+This branch is not release-accepted until the following evidence is attached to
+its pull request:
+
+1. GitHub Actions CI for the exact head commit: Python 3.11 and 3.13 test jobs,
+   Ruff, compileall, native FFmpeg rendering tests, and Windows smoke tests.
+2. Run the notebook's isolated Solo Stack preflight in a live Colab runtime;
+   record runtime type, preflight result, and any unavailable free service.
+3. Generate one complete portrait episode using a real chosen topic and named
+   products. Save the final MP4 and its evidence/visual manifests.
+4. Independently review the full video and audio: factual claims and sources,
+   app visual identity/legibility, presenter overlay and acting, voice,
+   subtitles, hook, pacing, transitions, ending, dimensions, and sound.
+5. Fix defects, regenerate, and repeat review. A passing automated gate or a
+   metadata-only report is not a substitute for watching and listening.
+
+Evidence states must be reported distinctly as implemented, automated-tested,
+Colab-executed, rendered, independently reviewed, and accepted. Do not claim
+release readiness while any required state is missing. The first episode's
+public release remains under Project Director approval.
