@@ -1,4 +1,6 @@
 from app.services import solo_stack_visual_retrieval as retrieval
+import json
+from pathlib import Path
 
 
 def test_build_scene_queries_tracks_distinct_script_scenes():
@@ -184,3 +186,27 @@ def test_vision_review_disabled_is_explicit_when_unconfigured(tmp_path, monkeypa
     result=retrieval._vision_review_candidate("specific subject",{},image_path)
     assert result["enabled"] is False
     assert result["score"] == 0
+
+
+def test_editorial_fallback_creates_local_scene_clips_without_network(tmp_path, monkeypatch):
+    from app.utils import utils
+
+    monkeypatch.setattr(utils, "task_dir", lambda task_id: str(tmp_path))
+    rendered = []
+
+    def fake_render(image_path, output_path, duration, aspect):
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_bytes(b"test clip")
+        rendered.append((image_path, output_path))
+
+    monkeypatch.setattr(retrieval, "_render_motion_clip", fake_render)
+    clips = retrieval.create_editorial_fallback_clips(
+        "fallback-task", "A simple topic", "First scene explains the idea. Second scene gives context.",
+        max_scenes=2,
+    )
+    assert len(clips) == 2
+    assert all(Path(path).is_file() for path in clips)
+    manifest = json.loads((tmp_path / "solo_stack/fallback_visuals/manifest.json").read_text())
+    assert manifest["visual_type"] == "generated_editorial_card"
+    assert manifest["product_evidence"] is False
+    assert len(manifest["scenes"]) == 2
