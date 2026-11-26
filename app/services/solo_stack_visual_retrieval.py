@@ -1,8 +1,8 @@
-"""Topic-aware still-image retrieval for Solo Stack episodes.
+"""Topic-aware image and video retrieval for Solo Stack episodes.
 
 Uses free Pixabay and Wikimedia Commons search, stores source/licence metadata,
-downloads validated image bytes, and renders local motion clips. Retrieved
-stock/Commons images are supporting visuals only; they never count as authentic
+downloads validated image/video bytes, and renders local motion clips. Retrieved
+stock/Commons media are supporting visuals only; they never count as authentic
 product-interface evidence.
 """
 from __future__ import annotations
@@ -520,7 +520,7 @@ def prepare_dynamic_scene_visuals(
         ]
         candidates = sorted(
             candidates,
-            key=lambda item: (-_candidate_score(query, item), item.get("provider", "")),
+            key=lambda item: (-_candidate_score(query, item), 0 if item.get("video_url") else 1, item.get("provider", "")),
         )
         selected = None
         for candidate in candidates[:10]:
