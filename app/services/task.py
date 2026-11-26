@@ -1446,7 +1446,7 @@ def _solo_stack_product_visual_blockers(task_id: str) -> list[str]:
 
 def generate_final_videos(
     task_id, params, downloaded_videos, audio_file, subtitle_path, audio_duration,
-    *, partial_results: dict | None = None,
+    *, partial_results: dict | None = None, video_script: str = "",
 ):
     """Record completed outputs even if a later clip raises before returning."""
     final_video_paths = []
@@ -2636,6 +2636,7 @@ def _run_pipeline(
             subtitle_path,
             audio_duration,
             partial_results=partial_results,
+            video_script=video_script,
         )
     except Exception as exc:
         logger.exception(f"video batch failed, task_id: {task_id}, error: {exc}")
