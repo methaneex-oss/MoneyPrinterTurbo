@@ -128,3 +128,27 @@ def test_video_candidates_win_relevance_ties():
                           item.get("provider", "")),
     )
     assert ordered[0] is video
+
+def test_commons_video_search_preserves_license_and_source_metadata(tmp_path, monkeypatch):
+    class Response:
+        def raise_for_status(self):
+            pass
+        def json(self):
+            return {"query": {"pages": {"123": {
+                "pageid": 123, "title": "File:Business meeting.webm",
+                "imageinfo": [{
+                    "url": "https://upload.wikimedia.org/wikipedia/commons/demo.webm",
+                    "descriptionurl": "https://commons.wikimedia.org/wiki/File:Business_meeting.webm",
+                    "width": 1280, "height": 720,
+                    "extmetadata": {
+                        "LicenseShortName": {"value": "CC BY 4.0"},
+                        "Artist": {"value": "Test creator"},
+                    }
+                }]
+            }}}}
+    monkeypatch.setattr(retrieval.requests, "get", lambda *a, **k: Response())
+    items = retrieval._commons_video_search("business meeting", tmp_path)
+    assert items[0]["provider"] == "wikimedia_commons_video"
+    assert items[0]["video_url"].endswith(".webm")
+    assert items[0]["license"] == "CC BY 4.0"
+    assert retrieval._license_is_usable(items[0])
