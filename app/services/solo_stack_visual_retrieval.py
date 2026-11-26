@@ -26,7 +26,9 @@ logger = logging.getLogger(__name__)
 _CACHE_SECONDS = 24 * 60 * 60
 _MAX_SCENES = 4
 _MAX_DOWNLOAD_BYTES = 12 * 1024 * 1024
+_MAX_VIDEO_DOWNLOAD_BYTES = 40 * 1024 * 1024
 _ALLOWED_IMAGE_HOSTS = {"cdn.pixabay.com", "pixabay.com", "upload.wikimedia.org"}
+_ALLOWED_VIDEO_HOSTS = {"cdn.pixabay.com", "pixabay.com"}
 _STOP = {
     "about", "after", "also", "and", "are", "because", "before", "but", "can",
     "could", "does", "for", "from", "how", "into", "its", "more", "not", "our",
@@ -220,6 +222,129 @@ def _commons_search(query: str, cache_dir: Path) -> list[dict]:
     return items
 
 
+
+def _pixabay_video_search(query: str, cache_dir: Path, api_key: str) -> list[dict]:
+    """Search Pixabay's video catalogue; videos retain source/licence metadata."""
+    cache = _cache_path(cache_dir, query, "pixabay_video")
+    cached = _read_cache(cache)
+    if cached is not None:
+        return cached
+    if not api_key:
+        return []
+    response = requests.get(
+        "https://pixabay.com/api/videos/",
+        params={
+            "key": api_key, "q": query, "safesearch": "true",
+            "per_page": 12, "min_width": 640, "min_height": 360,
+        },
+        timeout=(10, 25),
+    )
+    response.raise_for_status()
+    payload = response.json()
+    hits = payload.get("hits", []) if isinstance(payload, dict) else []
+    items = []
+    for hit in hits if isinstance(hits, list) else []:
+        if not isinstance(hit, dict):
+            continue
+        variants = hit.get("videos") or {}
+        variant = variants.get("medium") or variants.get("large") or variants.get("small") or {}
+        if not isinstance(variant, dict):
+            continue
+        items.append({
+            "provider": "pixabay_video",
+            "asset_id": str(hit.get("id") or ""),
+            "query": query,
+            "video_url": variant.get("url"),
+            "source_url": hit.get("pageURL"),
+            "title": hit.get("tags") or query,
+            "tags": hit.get("tags") or "",
+            "creator": hit.get("user") or "",
+            "license": "Pixabay Content License",
+            "attribution": f"{hit.get('user') or 'Contributor'} via Pixabay",
+            "width": variant.get("width") or 0,
+            "height": variant.get("height") or 0,
+            "duration": hit.get("duration") or 0,
+        })
+    _write_cache(cache, items)
+    return items
+
+
+def _download_video(item: dict, destination: Path) -> Path | None:
+    """Download a bounded Pixabay video; reject redirects outside approved hosts."""
+    url = item.get("video_url")
+    try:
+        parsed = urlparse(str(url or ""))
+        if (
+            parsed.scheme != "https"
+            or parsed.hostname not in _ALLOWED_VIDEO_HOSTS
+            or parsed.username is not None or parsed.password is not None
+            or (parsed.port is not None and parsed.port != 443)
+        ):
+            return None
+        response = requests.get(str(url), stream=True, timeout=(10, 30))
+        try:
+            final_url = urlparse(response.url)
+            if (
+                final_url.scheme != "https"
+                or final_url.hostname not in _ALLOWED_VIDEO_HOSTS
+                or final_url.username is not None or final_url.password is not None
+            ):
+                return None
+            response.raise_for_status()
+            content_type = response.headers.get("content-type", "").split(";", 1)[0].lower()
+            if content_type not in {"video/mp4", "application/octet-stream"}:
+                return None
+            chunks, size = [], 0
+            for chunk in response.iter_content(64 * 1024):
+                if not chunk:
+                    continue
+                size += len(chunk)
+                if size > _MAX_VIDEO_DOWNLOAD_BYTES:
+                    return None
+                chunks.append(chunk)
+            body = b"".join(chunks)
+            if not body:
+                return None
+        finally:
+            response.close()
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        target = destination.with_suffix(".mp4")
+        target.write_bytes(body)
+        # ffprobe must confirm a decodable video stream before accepting the file.
+        probe = subprocess.run(
+            ["ffprobe", "-v", "error", "-select_streams", "v:0",
+             "-show_entries", "stream=width,height,duration", "-of", "json", str(target)],
+            check=True, capture_output=True, timeout=30,
+        )
+        stream_data = json.loads(probe.stdout.decode("utf-8", errors="replace"))
+        if not (stream_data.get("streams") or []):
+            target.unlink(missing_ok=True)
+            return None
+        return target
+    except (OSError, ValueError, requests.RequestException, subprocess.SubprocessError) as exc:
+        logger.debug("Skipping invalid dynamic video candidate: %s", type(exc).__name__)
+        try:
+            destination.with_suffix(".mp4").unlink(missing_ok=True)
+        except OSError:
+            pass
+        return None
+
+
+def _render_video_clip(
+    source_path: Path, output_path: Path, duration: float, aspect: str
+) -> None:
+    width, height = (1080, 1920) if aspect in {"9:16", "portrait"} else (1920, 1080)
+    safe_duration = max(2.0, min(float(duration), 6.0))
+    subprocess.run(
+        ["ffmpeg", "-y", "-loglevel", "error", "-stream_loop", "-1",
+         "-i", str(source_path), "-t", str(safe_duration),
+         "-vf", f"scale={width}:{height}:force_original_aspect_ratio=decrease,"
+         f"pad={width}:{height}:(ow-iw)/2:(oh-ih)/2:color=#101827,"
+         "fps=30,format=yuv420p", "-an", "-c:v", "libx264", "-preset", "veryfast",
+         "-crf", "22", "-movflags", "+faststart", str(output_path)],
+        check=True, capture_output=True, timeout=120,
+    )
+
 def _candidate_score(query: str, item: dict) -> int:
     query_terms = set(_tokens(query))
     candidate_text = " ".join(
@@ -378,6 +503,7 @@ def prepare_dynamic_scene_visuals(
     for scene_index, query in enumerate(queries, start=1):
         candidates = []
         for provider_search in (
+            lambda: _pixabay_video_search(query, cache_dir, api_key),
             lambda: _pixabay_search(query, cache_dir, api_key),
             lambda: _commons_search(query, cache_dir),
         ):
@@ -397,28 +523,37 @@ def prepare_dynamic_scene_visuals(
             key=lambda item: (-_candidate_score(query, item), item.get("provider", "")),
         )
         selected = None
-        for candidate in candidates[:8]:
+        for candidate in candidates[:10]:
             asset_name = candidate.get("asset_id") or "asset"
-            image_path = media_dir / (
-                f"scene-{scene_index}-{candidate.get('provider')}-{asset_name}.img"
-            )
-            downloaded = _download_image(candidate, image_path)
-            if downloaded:
-                selected = (candidate, downloaded)
-                break
+            if candidate.get("video_url"):
+                video_path = media_dir / (
+                    f"scene-{scene_index}-{candidate.get('provider')}-{asset_name}.mp4"
+                )
+                downloaded = _download_video(candidate, video_path)
+                if downloaded:
+                    selected = (candidate, downloaded, "video")
+                    break
+            else:
+                image_path = media_dir / (
+                    f"scene-{scene_index}-{candidate.get('provider')}-{asset_name}.img"
+                )
+                downloaded = _download_image(candidate, image_path)
+                if downloaded:
+                    selected = (candidate, downloaded, "image")
+                    break
         if not selected:
             manifest["visuals"].append({
                 "scene_id": scene_index, "query": query, "status": "unresolved",
             })
             continue
 
-        candidate, image_path = selected
-        # _download_image() writes the validated bytes using the detected real
-        # image extension (.jpg/.png/.webp), not the temporary .img suffix.
-        # Keep the returned path for rendering, manifest paths, and hashing.
+        candidate, source_path, media_type = selected
         clip_path = clips_dir / f"scene-{scene_index}.mp4"
         try:
-            _render_motion_clip(image_path, clip_path, duration, aspect)
+            if media_type == "video":
+                _render_video_clip(source_path, clip_path, duration, aspect)
+            else:
+                _render_motion_clip(source_path, clip_path, duration, aspect)
         except Exception as exc:
             logger.warning(
                 "Could not render dynamic visual clip: %s", type(exc).__name__
@@ -437,12 +572,13 @@ def prepare_dynamic_scene_visuals(
             "provider": candidate.get("provider"),
             "asset_id": candidate.get("asset_id"),
             "file": str(clip_path.relative_to(task_dir)),
-            "image_file": str(image_path.relative_to(task_dir)),
+            "source_file": str(source_path.relative_to(task_dir)),
+            "media_type": media_type,
             "source_url": candidate.get("source_url"),
             "license": candidate.get("license"),
             "creator": candidate.get("creator"),
             "attribution": candidate.get("attribution"),
-            "sha256": hashlib.sha256(image_path.read_bytes()).hexdigest(),
+            "sha256": hashlib.sha256(source_path.read_bytes()).hexdigest(),
             "width": candidate.get("width"), "height": candidate.get("height"),
             "is_product_evidence": False,
         }
