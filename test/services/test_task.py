@@ -438,6 +438,34 @@ class TestTaskService(unittest.TestCase):
         )
         self.assertEqual(payload["solo_stack_evidence"], evidence)
 
+    def test_generate_final_videos_passes_script_to_solo_stack_director(self):
+        """Presenter direction must be planned from the script in this render scope."""
+        params = VideoParams(video_subject="AI changing everyday life", video_count=1)
+        script = "From your phone to your workplace, AI is changing daily life."
+
+        with (
+            patch.object(tm.config.app, "get", side_effect=lambda key, default=None: True if key == "solo_stack_mode" else default),
+            patch.object(tm.solo_stack_director, "plan_performance", return_value={"action": "explain"}) as plan,
+            patch.object(tm.video, "combine_videos") as combine,
+            patch.object(tm.video, "generate_video"),
+            patch.object(tm.sm.state, "update_task"),
+        ):
+            tm.generate_final_videos(
+                task_id="presenter-script-scope",
+                params=params,
+                downloaded_videos=["material.mp4"],
+                audio_file="audio.mp3",
+                subtitle_path="",
+                audio_duration=5,
+                video_script=script,
+            )
+
+        plan.assert_called_once_with(script, params.video_subject)
+        self.assertEqual(
+            combine.call_args.kwargs["presenter_direction"],
+            {"action": "explain"},
+        )
+
     def test_generate_final_videos_forwards_clip_speed_and_fit_mode(self):
         """任务编排层必须把画面速度和适配模式传给视频合成服务。"""
         params = VideoParams(
