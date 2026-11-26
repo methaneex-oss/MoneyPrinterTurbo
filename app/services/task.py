@@ -2558,6 +2558,38 @@ def _run_pipeline(
                 # must not mislabel generic imagery as product evidence or break the task.
                 logger.warning("Solo Stack dynamic visual retrieval skipped: {}".format(exc))
 
+    if not downloaded_videos and bool(config.app.get("solo_stack_mode", False)):
+        # For episodes that do not require authentic product evidence, optional
+        # external stock retrieval is not a production dependency. Use locally
+        # generated editorial cards so narration/presenter/subtitles can proceed.
+        try:
+            products = solo_stack_product_media.identify_products(
+                params.video_subject, video_script, video_terms, limit=3
+            )
+        except Exception:
+            products = []
+        if not products:
+            try:
+                downloaded_videos = solo_stack_visual_retrieval.create_editorial_fallback_clips(
+                    task_id=task_id,
+                    subject=params.video_subject,
+                    script=video_script,
+                    aspect=getattr(params.video_aspect, "value", params.video_aspect),
+                    duration=max(2.5, min(4.5, float(params.video_clip_duration or 3.5))),
+                    max_scenes=3,
+                )
+                logger.warning(
+                    "Solo Stack external visuals unavailable; using %d locally generated editorial scene cards",
+                    len(downloaded_videos),
+                )
+            except Exception as fallback_exc:
+                logger.exception("Solo Stack local editorial fallback failed")
+                return _mark_task_failed(
+                    task_id, "materials",
+                    "External visuals were unavailable and local fallback could not be created: "
+                    + str(fallback_exc)[:300],
+                )
+
     if not downloaded_videos:
         return _mark_task_failed(
             task_id,
