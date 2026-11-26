@@ -28,7 +28,7 @@ _MAX_SCENES = 4
 _MAX_DOWNLOAD_BYTES = 12 * 1024 * 1024
 _MAX_VIDEO_DOWNLOAD_BYTES = 40 * 1024 * 1024
 _ALLOWED_IMAGE_HOSTS = {"cdn.pixabay.com", "pixabay.com", "upload.wikimedia.org"}
-_ALLOWED_VIDEO_HOSTS = {"cdn.pixabay.com", "pixabay.com"}
+_ALLOWED_VIDEO_HOSTS = {"cdn.pixabay.com", "pixabay.com", "upload.wikimedia.org"}
 _STOP = {
     "about", "after", "also", "and", "are", "because", "before", "but", "can",
     "could", "does", "for", "from", "how", "into", "its", "more", "not", "our",
@@ -345,6 +345,56 @@ def _render_video_clip(
         check=True, capture_output=True, timeout=120,
     )
 
+
+def _commons_video_search(query: str, cache_dir: Path) -> list[dict]:
+    """Search Wikimedia Commons video files and preserve their licence metadata."""
+    cache = _cache_path(cache_dir, query, "commons_video")
+    cached = _read_cache(cache)
+    if cached is not None:
+        return cached
+    response = requests.get(
+        "https://commons.wikimedia.org/w/api.php",
+        params={
+            "action": "query", "format": "json", "generator": "search",
+            "gsrsearch": f"filetype:video {query}", "gsrnamespace": 6,
+            "gsrlimit": 12, "prop": "imageinfo", "iiprop": "url|extmetadata",
+        },
+        headers={"User-Agent": "SoloStackVisualResearch/1.0 (https://github.com/methaneex-oss/MoneyPrinterTurbo)"},
+        timeout=(10, 25),
+    )
+    response.raise_for_status()
+    payload = response.json()
+    pages = (payload.get("query") or {}).get("pages") or {}
+    items = []
+    for page in pages.values() if isinstance(pages, dict) else []:
+        info_list = page.get("imageinfo") or []
+        if not info_list or not isinstance(info_list[0], dict):
+            continue
+        info = info_list[0]
+        media_url = info.get("url")
+        if not media_url:
+            continue
+        meta = info.get("extmetadata") or {}
+        def meta_value(key):
+            value = meta.get(key) or {}
+            return re.sub(r"<[^>]+>", "", str(value.get("value") or "")).strip()
+        items.append({
+            "provider": "wikimedia_commons_video",
+            "asset_id": str(page.get("pageid") or ""),
+            "query": query,
+            "video_url": media_url,
+            "source_url": info.get("descriptionurl"),
+            "title": page.get("title") or query,
+            "tags": page.get("title") or "",
+            "creator": meta_value("Artist"),
+            "license": meta_value("LicenseShortName") or "License not identified",
+            "attribution": meta_value("AttributionRequired") or meta_value("Artist"),
+            "width": info.get("width") or 0,
+            "height": info.get("height") or 0,
+        })
+    _write_cache(cache, items)
+    return items
+
 def _candidate_score(query: str, item: dict) -> int:
     query_terms = set(_tokens(query))
     candidate_text = " ".join(
@@ -356,7 +406,7 @@ def _candidate_score(query: str, item: dict) -> int:
 
 def _license_is_usable(item: dict) -> bool:
     """Only use sources with a known licence suitable for edited video."""
-    if item.get("provider") == "pixabay":
+    if item.get("provider") in {"pixabay", "pixabay_video"}:
         return True
     license_name = str(item.get("license") or "").casefold()
     restricted_markers = (
@@ -504,6 +554,7 @@ def prepare_dynamic_scene_visuals(
         candidates = []
         for provider_search in (
             lambda: _pixabay_video_search(query, cache_dir, api_key),
+            lambda: _commons_video_search(query, cache_dir),
             lambda: _pixabay_search(query, cache_dir, api_key),
             lambda: _commons_search(query, cache_dir),
         ):
