@@ -722,7 +722,9 @@ def prepare_dynamic_scene_visuals(
             "attribution": candidate.get("attribution"),
             "sha256": hashlib.sha256(source_path.read_bytes()).hexdigest(),
             "width": candidate.get("width"), "height": candidate.get("height"),
-            "is_product_evidence": False,\n            "visual_review": review,\n            "candidate_reviews": candidate_reviews,
+            "is_product_evidence": False,
+            "visual_review": review,
+            "candidate_reviews": candidate_reviews,
         }
         manifest["visuals"].append(record)
         clips.append(str(clip_path))
