@@ -648,6 +648,7 @@ def prepare_dynamic_scene_visuals(
             key=lambda item: (-_candidate_score(query, item), 0 if item.get("video_url") else 1, item.get("provider", "")),
         )
         reviewed_candidates = []
+        candidate_reviews = []
         # Acquire several candidates first; do not stop at the first keyword match.
         for candidate in candidates[:6]:
             asset_name = candidate.get("asset_id") or "asset"
@@ -662,8 +663,16 @@ def prepare_dynamic_scene_visuals(
             if not downloaded:
                 continue
             review = _vision_review_candidate(query, candidate, downloaded)
-            # Configured reviewer is mandatory for selection: a model failure/low score
-            # must not silently fall back to keyword relevance.
+            accepted = bool(
+                (review.get("enabled") and review.get("relevant")
+                 and review.get("depicts_requested_subject") and review.get("score", 0) >= 72)
+                or (not review.get("enabled") and _candidate_score(query, candidate) >= 2)
+            )
+            candidate_reviews.append({"provider": candidate.get("provider"),
+                "asset_id": candidate.get("asset_id"), "source_url": candidate.get("source_url"),
+                "review": review, "accepted": accepted})
+            # A configured reviewer is mandatory for selection: a model failure or
+            # low score cannot silently fall back to keyword relevance.
             if review.get("enabled") and (
                 not review.get("relevant") or not review.get("depicts_requested_subject")
                 or review.get("score", 0) < 72
@@ -675,7 +684,7 @@ def prepare_dynamic_scene_visuals(
         selected = reviewed_candidates[0] if reviewed_candidates else None
         if not selected:
             manifest["visuals"].append({
-                "scene_id": scene_index, "query": query, "status": "unresolved",
+                "scene_id": scene_index, "query": query, "status": "unresolved",\n                "candidate_reviews": candidate_reviews,
             })
             continue
 
@@ -712,7 +721,7 @@ def prepare_dynamic_scene_visuals(
             "attribution": candidate.get("attribution"),
             "sha256": hashlib.sha256(source_path.read_bytes()).hexdigest(),
             "width": candidate.get("width"), "height": candidate.get("height"),
-            "is_product_evidence": False,\n            "visual_review": review,
+            "is_product_evidence": False,\n            "visual_review": review,\n            "candidate_reviews": candidate_reviews,
         }
         manifest["visuals"].append(record)
         clips.append(str(clip_path))
