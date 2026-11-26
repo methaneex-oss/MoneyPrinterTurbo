@@ -292,7 +292,7 @@ def _download_video(item: dict, destination: Path) -> Path | None:
                 return None
             response.raise_for_status()
             content_type = response.headers.get("content-type", "").split(";", 1)[0].lower()
-            if content_type not in {"video/mp4", "application/octet-stream"}:
+            if not (content_type.startswith("video/") or content_type == "application/octet-stream"):
                 return None
             chunks, size = [], 0
             for chunk in response.iter_content(64 * 1024):
