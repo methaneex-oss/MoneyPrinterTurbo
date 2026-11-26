@@ -19,7 +19,7 @@ from urllib.parse import urlparse
 from uuid import uuid4
 
 import requests
-from PIL import Image
+from PIL import Image, ImageDraw, ImageFont
 
 logger = logging.getLogger(__name__)
 
@@ -594,6 +594,67 @@ def _render_motion_clip(
         ],
         check=True, capture_output=True, timeout=90,
     )
+
+
+
+def create_editorial_fallback_clips(
+    task_id: str, subject: str, script: str, aspect: str = "9:16", duration: float = 3.5,
+    max_scenes: int = 3,
+) -> list[str]:
+    """Create clean editorial scene cards when optional external visuals are unavailable.
+
+    This fallback is intentionally generic and never represents itself as product
+    evidence, screenshots, or retrieved imagery.
+    """
+    from app.utils import utils
+
+    task_dir = Path(utils.task_dir(task_id)).resolve()
+    root = task_dir / "solo_stack" / "fallback_visuals"
+    images_dir, clips_dir = root / "images", root / "clips"
+    images_dir.mkdir(parents=True, exist_ok=True)
+    clips_dir.mkdir(parents=True, exist_ok=True)
+    sentences = [re.sub(r"\\s+", " ", part).strip() for part in re.split(r"(?<=[.!?])\\s+|\\n+", str(script or ""))]
+    scenes = [s for s in sentences if len(s) > 12][:max(1, min(int(max_scenes), 4))]
+    if not scenes:
+        scenes = [str(subject or "Solo Stack").strip()]
+    width, height = (1080, 1920) if aspect in {"9:16", "portrait"} else (1920, 1080)
+    clips = []
+    manifest = {"schema_version": 1, "visual_type": "generated_editorial_card", "product_evidence": False, "scenes": []}
+    for idx, text in enumerate(scenes, start=1):
+        image_path = images_dir / f"scene-{idx}.png"
+        clip_path = clips_dir / f"scene-{idx}.mp4"
+        image = Image.new("RGB", (width, height), "#101827")
+        draw = ImageDraw.Draw(image)
+        # Simple designed composition; all text is script-derived and locally rendered.
+        draw.rounded_rectangle((int(width*.08), int(height*.12), int(width*.92), int(height*.88)), radius=48, fill="#17243a", outline="#314765", width=4)
+        draw.text((int(width*.12), int(height*.18)), "SOLO STACK  /  EDITORIAL", fill="#86c5ff")
+        font_path = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
+        try:
+            font = ImageFont.truetype(font_path, max(34, int(width*.055)))
+        except OSError:
+            font = ImageFont.load_default()
+        # Word-wrap to a readable card width without requiring external fonts.
+        words, lines, line = text.split(), [], ""
+        max_chars = 24 if height > width else 46
+        for word in words:
+            candidate = (line + " " + word).strip()
+            if len(candidate) > max_chars and line:
+                lines.append(line); line = word
+            else:
+                line = candidate
+        if line: lines.append(line)
+        lines = lines[:8]
+        y = int(height*.36)
+        for line in lines:
+            draw.text((int(width*.12), y), line, font=font, fill="#f4f7fb")
+            y += int(font.size*1.35)
+        draw.text((int(width*.12), int(height*.78)), f"SCENE {idx:02d}", fill="#9bb4d0")
+        image.save(image_path)
+        _render_motion_clip(image_path, clip_path, duration, aspect)
+        clips.append(str(clip_path))
+        manifest["scenes"].append({"scene_id": idx, "text": text, "file": str(clip_path.relative_to(task_dir))})
+    (root / "manifest.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
+    return clips
 
 
 def prepare_dynamic_scene_visuals(
