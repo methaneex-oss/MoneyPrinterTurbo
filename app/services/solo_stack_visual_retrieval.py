@@ -439,6 +439,7 @@ def _vision_review_candidate(query: str, candidate: dict, media_path: Path) -> d
             "authentic_product_ui:false, reason:'brief', visible_subject:'brief'}. "
             "Requirement: " + query + " Candidate title/tags: " +
             str(candidate.get("title") or candidate.get("tags") or "")
+        )
         response = requests.post(
             endpoint,
             headers={"Authorization": f"Bearer {key}"} if key else {},
