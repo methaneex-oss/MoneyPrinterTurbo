@@ -152,3 +152,35 @@ def test_commons_video_search_preserves_license_and_source_metadata(tmp_path, mo
     assert items[0]["video_url"].endswith(".webm")
     assert items[0]["license"] == "CC BY 4.0"
     assert retrieval._license_is_usable(items[0])
+
+def test_vision_review_scores_candidate_and_requires_subject_match(tmp_path, monkeypatch):
+    from PIL import Image
+    import os
+    image_path=tmp_path/"candidate.jpg"
+    Image.new("RGB",(400,300),(80,120,150)).save(image_path)
+    monkeypatch.setenv("SOLO_STACK_VISION_API_BASE","http://localhost:11434/v1")
+    monkeypatch.setenv("SOLO_STACK_VISION_MODEL","vision-test")
+    monkeypatch.delenv("SOLO_STACK_VISION_API_KEY",raising=False)
+    class Response:
+        def raise_for_status(self): pass
+        def json(self):
+            return {"choices":[{"message":{"content":'{"score":91,"relevant":true,"depicts_requested_subject":true,"authentic_product_ui":false,"reason":"Shows requested context","visible_subject":"business workflow"}'}}]}
+    monkeypatch.setattr(retrieval.requests,"post",lambda *a,**k:Response())
+    result=retrieval._vision_review_candidate(
+        "freelancer invoicing workflow",{"title":"invoicing app"},image_path)
+    assert result["enabled"] is True
+    assert result["score"] == 91
+    assert result["relevant"] is True
+    assert result["depicts_requested_subject"] is True
+    assert result["model"]=="vision-test"
+
+
+def test_vision_review_disabled_is_explicit_when_unconfigured(tmp_path, monkeypatch):
+    from PIL import Image
+    monkeypatch.delenv("SOLO_STACK_VISION_API_BASE",raising=False)
+    monkeypatch.delenv("SOLO_STACK_VISION_MODEL",raising=False)
+    image_path=tmp_path/"candidate.png"
+    Image.new("RGB",(320,240)).save(image_path)
+    result=retrieval._vision_review_candidate("specific subject",{},image_path)
+    assert result["enabled"] is False
+    assert result["score"] == 0
