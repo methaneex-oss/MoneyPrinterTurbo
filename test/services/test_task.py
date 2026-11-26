@@ -444,8 +444,18 @@ class TestTaskService(unittest.TestCase):
         script = "From your phone to your workplace, AI is changing daily life."
 
         with (
-            patch.object(tm.config.app, "get", side_effect=lambda key, default=None: True if key == "solo_stack_mode" else default),
-            patch.object(tm.solo_stack_director, "plan_performance", return_value={"action": "explain"}) as plan,
+            patch.object(
+                tm.config.app,
+                "get",
+                side_effect=lambda key, default=None: (
+                    True if key == "solo_stack_mode" else default
+                ),
+            ),
+            patch.object(
+                tm.solo_stack_director,
+                "plan_performance",
+                return_value={"action": "explain"},
+            ) as plan,
             patch.object(tm.video, "combine_videos") as combine,
             patch.object(tm.video, "generate_video"),
             patch.object(tm.sm.state, "update_task"),
