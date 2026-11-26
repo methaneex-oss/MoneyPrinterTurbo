@@ -395,6 +395,80 @@ def _commons_video_search(query: str, cache_dir: Path) -> list[dict]:
     _write_cache(cache, items)
     return items
 
+
+def _vision_review_candidate(query: str, candidate: dict, media_path: Path) -> dict:
+    """Optional independent multimodal reviewer; configure via environment only."""
+    import base64
+    import os
+
+    base = os.getenv("SOLO_STACK_VISION_API_BASE", "").strip()
+    model = os.getenv("SOLO_STACK_VISION_MODEL", "").strip()
+    key = os.getenv("SOLO_STACK_VISION_API_KEY", "").strip()
+    if not base or not model:
+        return {"enabled": False, "score": 0, "reason": "vision reviewer not configured"}
+    try:
+        from PIL import Image
+        frame_path = media_path
+        if media_path.suffix.lower() in {".mp4", ".webm", ".mov", ".mkv"}:
+            frame_path = media_path.with_suffix(".review.jpg")
+            subprocess.run(
+                ["ffmpeg", "-y", "-loglevel", "error", "-ss", "0.5", "-i",
+                 str(media_path), "-frames:v", "1", "-vf", "scale=768:-1",
+                 str(frame_path)],
+                check=True, capture_output=True, timeout=30,
+            )
+        with Image.open(frame_path) as im:
+            im.thumbnail((768, 768))
+            buffer = io.BytesIO()
+            im.convert("RGB").save(buffer, format="JPEG", quality=82)
+        data = base64.b64encode(buffer.getvalue()).decode("ascii")
+        endpoint = base.rstrip("/")
+        if endpoint.endswith("/v1"):
+            endpoint += "/chat/completions"
+        elif endpoint.endswith("/api"):
+            endpoint += "/chat"
+        else:
+            endpoint += "/v1/chat/completions"
+        prompt = (
+            "You are an independent visual asset reviewer for an educational video. "
+            "Judge the attached image/frame against the scene requirement, not its filename. "
+            "Reject generic, unrelated, misleading, wrong-product, or merely keyword-matching "
+            "images. If a named product/UI is required, verify that it visibly depicts that "
+            "specific product/interface and feature; do not infer authenticity from appearance. "
+            "Return JSON only: {score:0-100, relevant:true/false, depicts_requested_subject:true/false, "
+            "authentic_product_ui:false, reason:'brief', visible_subject:'brief'}. "
+            "Requirement: " + query + " Candidate title/tags: " +
+            str(candidate.get("title") or candidate.get("tags") or "")
+        response = requests.post(
+            endpoint,
+            headers={"Authorization": f"Bearer {key}"} if key else {},
+            json={"model": model, "temperature": 0,
+                  "messages":[{"role":"user","content":[
+                      {"type":"text","text":prompt},
+                      {"type":"image_url","image_url":{"url":"data:image/jpeg;base64,"+data}}
+                  ]}]},
+            timeout=(15, 60),
+        )
+        response.raise_for_status()
+        payload=response.json()
+        content=payload.get("choices", [{}])[0].get("message", {}).get("content", "")
+        match=re.search(r"\{.*\}", str(content), re.S)
+        if not match:
+            return {"enabled": True, "score": 0, "reason": "reviewer returned non-JSON"}
+        result=json.loads(match.group(0))
+        score=max(0,min(100,int(result.get("score",0))))
+        return {"enabled":True,"score":score,
+                "relevant":bool(result.get("relevant")),
+                "depicts_requested_subject":bool(result.get("depicts_requested_subject")),
+                "authentic_product_ui":bool(result.get("authentic_product_ui")),
+                "reason":str(result.get("reason",""))[:400],
+                "visible_subject":str(result.get("visible_subject",""))[:200],
+                "model":model}
+    except Exception as exc:
+        logger.warning("Visual AI review failed: %s", type(exc).__name__)
+        return {"enabled":True,"score":0,"reason":"review failed: "+type(exc).__name__}
+
+
 def _candidate_score(query: str, item: dict) -> int:
     query_terms = set(_tokens(query))
     candidate_text = " ".join(
@@ -573,32 +647,39 @@ def prepare_dynamic_scene_visuals(
             candidates,
             key=lambda item: (-_candidate_score(query, item), 0 if item.get("video_url") else 1, item.get("provider", "")),
         )
-        selected = None
-        for candidate in candidates[:10]:
+        reviewed_candidates = []
+        # Acquire several candidates first; do not stop at the first keyword match.
+        for candidate in candidates[:6]:
             asset_name = candidate.get("asset_id") or "asset"
             if candidate.get("video_url"):
-                video_path = media_dir / (
-                    f"scene-{scene_index}-{candidate.get('provider')}-{asset_name}.mp4"
-                )
-                downloaded = _download_video(candidate, video_path)
-                if downloaded:
-                    selected = (candidate, downloaded, "video")
-                    break
+                source_path = media_dir / f"scene-{scene_index}-{candidate.get('provider')}-{asset_name}.mp4"
+                downloaded = _download_video(candidate, source_path)
+                media_type = "video"
             else:
-                image_path = media_dir / (
-                    f"scene-{scene_index}-{candidate.get('provider')}-{asset_name}.img"
-                )
-                downloaded = _download_image(candidate, image_path)
-                if downloaded:
-                    selected = (candidate, downloaded, "image")
-                    break
+                source_path = media_dir / f"scene-{scene_index}-{candidate.get('provider')}-{asset_name}.img"
+                downloaded = _download_image(candidate, source_path)
+                media_type = "image"
+            if not downloaded:
+                continue
+            review = _vision_review_candidate(query, candidate, downloaded)
+            # Configured reviewer is mandatory for selection: a model failure/low score
+            # must not silently fall back to keyword relevance.
+            if review.get("enabled") and (
+                not review.get("relevant") or not review.get("depicts_requested_subject")
+                or review.get("score", 0) < 72
+            ):
+                continue
+            if not review.get("enabled") and _candidate_score(query, candidate) < 2:
+                continue
+            reviewed_candidates.append((candidate, downloaded, media_type, review))
+        selected = reviewed_candidates[0] if reviewed_candidates else None
         if not selected:
             manifest["visuals"].append({
                 "scene_id": scene_index, "query": query, "status": "unresolved",
             })
             continue
 
-        candidate, source_path, media_type = selected
+        candidate, source_path, media_type, review = selected
         clip_path = clips_dir / f"scene-{scene_index}.mp4"
         try:
             if media_type == "video":
@@ -631,7 +712,7 @@ def prepare_dynamic_scene_visuals(
             "attribution": candidate.get("attribution"),
             "sha256": hashlib.sha256(source_path.read_bytes()).hexdigest(),
             "width": candidate.get("width"), "height": candidate.get("height"),
-            "is_product_evidence": False,
+            "is_product_evidence": False,\n            "visual_review": review,
         }
         manifest["visuals"].append(record)
         clips.append(str(clip_path))
