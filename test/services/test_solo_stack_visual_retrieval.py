@@ -80,3 +80,51 @@ def test_dynamic_visuals_are_never_product_evidence():
     # The manifest contract is explicit: these are generic supporting images,
     # not authenticated software-interface captures.
     assert "non-evidence" in retrieval.prepare_dynamic_scene_visuals.__doc__
+
+
+def test_pixabay_video_search_maps_metadata_and_caches(tmp_path, monkeypatch):
+    class Response:
+        def raise_for_status(self):
+            pass
+
+        def json(self):
+            return {"hits": [{
+                "id": 42, "pageURL": "https://pixabay.com/videos/demo-42/",
+                "tags": "freelancer office", "user": "creator",
+                "duration": 12, "videos": {
+                    "medium": {"url": "https://cdn.pixabay.com/video/demo.mp4",
+                              "width": 1280, "height": 720}
+                }
+            }]}
+
+    monkeypatch.setattr(retrieval.requests, "get", lambda *a, **k: Response())
+    items = retrieval._pixabay_video_search("freelancer office", tmp_path, "test-key")
+    assert items[0]["provider"] == "pixabay_video"
+    assert items[0]["asset_id"] == "42"
+    assert items[0]["video_url"].endswith("demo.mp4")
+    assert items[0]["license"] == "Pixabay Content License"
+    # A second lookup uses the cache and makes no network call.
+    monkeypatch.setattr(
+        retrieval.requests, "get",
+        lambda *a, **k: (_ for _ in ()).throw(AssertionError("cache miss")),
+    )
+    assert retrieval._pixabay_video_search("freelancer office", tmp_path, "test-key") == items
+
+
+def test_video_download_rejects_untrusted_hosts(tmp_path):
+    candidate = {"video_url": "https://example.invalid/video.mp4"}
+    assert retrieval._download_video(candidate, tmp_path / "clip.mp4") is None
+    assert not (tmp_path / "clip.mp4").exists()
+
+
+def test_video_candidates_win_relevance_ties():
+    query = "freelancer office"
+    image = {"provider": "pixabay", "title": query, "tags": query}
+    video = {"provider": "pixabay_video", "title": query, "tags": query, "video_url": "https://cdn.pixabay.com/v.mp4"}
+    ordered = sorted(
+        [image, video],
+        key=lambda item: (-retrieval._candidate_score(query, item),
+                          0 if item.get("video_url") else 1,
+                          item.get("provider", "")),
+    )
+    assert ordered[0] is video
