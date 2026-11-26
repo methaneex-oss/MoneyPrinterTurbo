@@ -2567,7 +2567,8 @@ def _run_pipeline(
                 params.video_subject, video_script, video_terms, limit=3
             )
         except Exception:
-            products = []
+            logger.exception("Solo Stack product-intent classification failed; refusing generic visual fallback")
+            products = ["classification-unavailable"]
         if not products:
             try:
                 downloaded_videos = solo_stack_visual_retrieval.create_editorial_fallback_clips(
