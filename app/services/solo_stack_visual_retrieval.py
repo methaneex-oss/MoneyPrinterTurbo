@@ -684,7 +684,8 @@ def prepare_dynamic_scene_visuals(
         selected = reviewed_candidates[0] if reviewed_candidates else None
         if not selected:
             manifest["visuals"].append({
-                "scene_id": scene_index, "query": query, "status": "unresolved",\n                "candidate_reviews": candidate_reviews,
+                "scene_id": scene_index, "query": query, "status": "unresolved",
+                "candidate_reviews": candidate_reviews,
             })
             continue
 
