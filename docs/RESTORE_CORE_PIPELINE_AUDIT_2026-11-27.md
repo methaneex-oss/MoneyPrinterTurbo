@@ -23,6 +23,11 @@ Restore and preserve MoneyPrinterTurbo's original production mechanisms. Integra
 
 ## Initial risk findings (not yet fully audited)
 
+5. **Shared-render behavior changed globally:** the feature branch inserts the new vector scene graphic in `video.combine_videos()` whenever a scene label exists, without gating it to Solo Stack. Main previously rendered the animated chapter tag but did not add this new graphic panel. This is a default-render change and must be made opt-in (or Solo Stack-only) to preserve baseline output. Presenter itself is explicitly gated by its enable flag.
+6. **Product capture failure changed behavior:** the original integration treated public official-source capture as supplemental and continued on failure; current feature branch marks capture failure and fails the task in Solo Stack mode. This strict gate should not be the default production behavior; distinguish a missing evidence warning/fallback from an explicit director-required evidence gate.
+7. **New retrieval path is mostly optional/fail-soft:** dynamic supporting visuals are feature-flagged and exceptions are logged/skipped; no replacement of the base stock retrieval is intended. Review candidate acquisition, license policy, relevance fallback, and cache handling in detail before adopting.
+
+
 1. **Stack/merge risk:** stacked PR ancestry and a 432-commit delta make reviewing or merging PR #12 as a single upgrade unsafe.
 2. **Feature coupling:** Solo Stack-specific behavior is wired into shared task/render paths. Every injection point must be checked for strict mode gating and for preserving the original non-Solo Stack behavior.
 3. **Fail-closed gates:** authentic-product-visual coverage and some Solo Stack quality/provider gates can intentionally abort production. These are channel policy decisions, not baseline MoneyPrinterTurbo requirements; they must be scoped to Solo Stack and have actionable diagnostics.
