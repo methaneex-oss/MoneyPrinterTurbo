@@ -17,7 +17,7 @@ Restore and preserve MoneyPrinterTurbo's original production mechanisms. Integra
 - PR #12 is open, draft, unmerged; head `feat/solo-stack-presenter-quality-20261124` at `36531b37bdd57706a7f5ba78e952c7fd593f1996`.
 - The feature head is **432 commits ahead of main**, with 64 changed files and approximately 10,417 additions/deletions in compare metadata. The stacked feature PRs #1 and #3–#12 are not merged; PR #2 is closed but unmerged.
 - The feature stack is not a clean, isolated set of Solo Stack patches. Treat it as a large integration branch; verify ancestry and changes by function/file before adopting.
-- Branch #12 notebook is 22 cells and is materially different from main notebook (13,520 bytes vs 66,847 bytes).
+- Branch #12 notebook is 22 cells and is materially different from main notebook (main: 13,520 bytes; feature: 66,847 bytes).
 - Original main task pipeline and core render function remain recognizable. The inspected preflight/provider-validation section is substantially unchanged. Feature-specific additions enter around script policy, materials, visual evidence, presenter/composition, final quality gates, Colab configuration, and UI.
 - A fresh audit branch was created from main as a safe workspace. No code migration has been made yet.
 
@@ -35,6 +35,34 @@ Restore and preserve MoneyPrinterTurbo's original production mechanisms. Integra
 3. **Fail-closed gates:** authentic-product-visual coverage and some Solo Stack quality/provider gates can intentionally abort production. These are channel policy decisions, not baseline MoneyPrinterTurbo requirements; they must be scoped to Solo Stack and have actionable diagnostics.
 4. **Colab risk:** notebook setup has been extensively rewritten and requires line-by-line auditing for install, cache/config persistence, server startup/health, secrets, tunnel, and restart idempotence. The notebook has not been executed in Colab.
 5. **Verification gap:** current feature stack's stated tests, lint, CI, Colab preflight, actual MP4 render, and human audio/visual inspection are not verified in this session.
+
+## Confirmed detailed findings from static source review
+
+10. **Public product image redirect boundary is incomplete:** product images are filtered to HTTPS URLs on the discovered official host/subdomains, but the Playwright request that downloads them follows redirects and the code does not validate the final response URL against the same allowlist. This is a security hardening item before adoption. The public source discovery result is heuristic (Wikidata official-site property or search-result candidate), not proof that the website is official. The page title/description identity check is a secondary check, not an independent guarantee.
+11. **Official-site capture is not production-safe as a mandatory dependency:** the current feature integration may require Playwright when no operator captures exist, and can turn missing browser tooling or failed capture into a task failure. The migration must treat capture as optional supplemental material and record a truthful warning/fallback unless an explicit strict evidence policy is selected.
+12. **Supporting visuals are not semantically verified without the optional vision endpoint:** when vision review is disabled, retrieval uses a lightweight token-overlap score. The code marks this mode as not independently reviewed, but the score is not evidence that an image accurately represents the scene. The product must label its confidence and avoid treating keyword fallback as verified relevance.
+13. **The visual retrieval downloader is bounded and host-allowlisted:** candidate image/video downloads use HTTPS, allowlisted Pixabay/Commons hosts, size limits, content-type checks, image decoding checks and ffprobe for video. The final redirect host is checked; video final redirect validation should also enforce the allowed port, consistent with the initial URL check. These controls are useful but do not replace licensing/attribution or relevance review.
+14. **Provider restriction is channel-policy code, not a general upgrade:** free-only mode forces allowed sources/providers and disables some options in UI/task checks. Keep it explicitly opt-in and channel-configured; never change the standard config defaults or non-Solo Stack selection behavior.
+15. **Hook preflight is structural, not editorial verification:** it checks opening-question form, length and lexical topic overlap. It cannot prove that the hook is truthful, engaging, accurate or non-generic in meaning. Preserve status labels that distinguish structural checks from human/editorial review.
+16. **Product asset evidence has provenance but is operator-recorded:** manifest SHA-256 protects stored asset integrity and evidence dates/URLs are validated. It does not authenticate the screenshot as captured from the named product, independently validate claims, or guarantee that the current date is accurate. Product UI assets should be labelled operator-captured/source-page imagery, never independently verified evidence without a separate check.
+17. **File-backed task state is single-process:** suitable for the intended notebook runtime only if exactly one application process owns it. Do not enable it in multi-worker deployments or as a general default. Main Redis/Memory state remains the baseline.
+18. **The previous NameError remains unreproduced:** static inspection shows the primary pipeline assigns video_script = generate_script(...) before passing it into generate_terms; no source-only explanation is established. Do not patch based on guesswork. Exact traceback and runtime reproduction are still required.
+
+## Compatibility decision matrix (provisional)
+
+| Feature | Preserve baseline? | Migration rule |
+|---|---|---|
+| Original script/audio/subtitle/material/render/export pipeline | Yes | No replacement or altered default |
+| Presenter | Optional | Explicit flag; isolated from non-channel jobs |
+| Scene graphics | Optional | Solo Stack-only or explicit flag; no global render behavior |
+| Topic-aware image/video retrieval | Optional | Fail-soft; truthful source/license manifest; never replace core material provider |
+| Official product capture | Supplemental | Never abort ordinary production on discovery/capture failure; strict gate only when explicitly enabled |
+| Vision reviewer | Optional | No endpoint = review unavailable, not verified; provider errors fail-soft |
+| Hook/editorial preflight | Optional channel policy | Warnings/review labels; no claim of fact-checking |
+| Free-only provider restrictions | Channel config only | Must not modify generic config defaults or regular UI provider choices |
+| File-backed task state | Colab-only option | Single process; never default for general deployments |
+| Local model/animation | Optional experimental | Explicit opt-in and resource/license checks; do not silently download or invoke paid services |
+
 
 ## Core mechanism preservation checklist
 
