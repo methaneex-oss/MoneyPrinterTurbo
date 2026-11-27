@@ -23,11 +23,11 @@ Restore and preserve MoneyPrinterTurbo's original production mechanisms. Integra
 
 ## Initial risk findings (not yet fully audited)
 
-5. **Shared-render behavior changed globally:** the feature branch inserts the new vector scene graphic in `video.combine_videos()` whenever a scene label exists, without gating it to Solo Stack. Main previously rendered the animated chapter tag but did not add this new graphic panel. This is a default-render change and must be made opt-in (or Solo Stack-only) to preserve baseline output. Presenter itself is explicitly gated by its enable flag.
-6. **Product capture failure changed behavior:** the original integration treated public official-source capture as supplemental and continued on failure; current feature branch marks capture failure and fails the task in Solo Stack mode. This strict gate should not be the default production behavior; distinguish a missing evidence warning/fallback from an explicit director-required evidence gate.
-7. **New retrieval path is mostly optional/fail-soft:** dynamic supporting visuals are feature-flagged and exceptions are logged/skipped; no replacement of the base stock retrieval is intended. Review candidate acquisition, license policy, relevance fallback, and cache handling in detail before adopting.
-8. **Colab intentionally enables Solo Stack policy:** the notebook writes `solo_stack_mode=true` and `solo_stack_free_only=true`, and configures a Drive-backed task-state directory with Redis disabled. This is intentional for this channel notebook, but must not leak into ordinary installs or default configs. File-backed task state is documented as single-process only.
-9. **Original task lifecycle/preflight is retained in the inspected section:** supported-provider checks and credential validation before expensive generation appear unchanged between main and feature head. Added features occur after/around the original stages rather than replacing the whole pipeline. Continue auditing later stages, UI provider selection, and rendering before accepting this conclusion.
+1. **Shared-render behavior changed globally:** the feature branch inserts the new vector scene graphic in `video.combine_videos()` whenever a scene label exists, without gating it to Solo Stack. Main previously rendered the animated chapter tag but did not add this new graphic panel. This is a default-render change and must be made opt-in (or Solo Stack-only) to preserve baseline output. Presenter itself is explicitly gated by its enable flag.
+2. **Product capture failure changed behavior:** the original integration treated public official-source capture as supplemental and continued on failure; current feature branch marks capture failure and fails the task in Solo Stack mode. This strict gate should not be the default production behavior; distinguish a missing evidence warning/fallback from an explicit director-required evidence gate.
+3. **New retrieval path is mostly optional/fail-soft:** dynamic supporting visuals are feature-flagged and exceptions are logged/skipped; no replacement of the base stock retrieval is intended. Review candidate acquisition, license policy, relevance fallback, and cache handling in detail before adopting.
+4. **Colab intentionally enables Solo Stack policy:** the notebook writes `solo_stack_mode=true` and `solo_stack_free_only=true`, and configures a Drive-backed task-state directory with Redis disabled. This is intentional for this channel notebook, but must not leak into ordinary installs or default configs. File-backed task state is documented as single-process only.
+5. **Original task lifecycle/preflight is retained in the inspected section:** supported-provider checks and credential validation before expensive generation appear unchanged between main and feature head. Added features occur after/around the original stages rather than replacing the whole pipeline. Continue auditing later stages, UI provider selection, and rendering before accepting this conclusion.
 
 
 1. **Stack/merge risk:** stacked PR ancestry and a 432-commit delta make reviewing or merging PR #12 as a single upgrade unsafe.
@@ -35,6 +35,11 @@ Restore and preserve MoneyPrinterTurbo's original production mechanisms. Integra
 3. **Fail-closed gates:** authentic-product-visual coverage and some Solo Stack quality/provider gates can intentionally abort production. These are channel policy decisions, not baseline MoneyPrinterTurbo requirements; they must be scoped to Solo Stack and have actionable diagnostics.
 4. **Colab risk:** notebook setup has been extensively rewritten and requires line-by-line auditing for install, cache/config persistence, server startup/health, secrets, tunnel, and restart idempotence. The notebook has not been executed in Colab.
 5. **Verification gap:** current feature stack's stated tests, lint, CI, Colab preflight, actual MP4 render, and human audio/visual inspection are not verified in this session.
+
+
+6. **Task-level integration makes product evidence a hard dependency:** in the feature branch, `prepare_episode_product_visuals()` exceptions are caught, persisted as capture errors, and immediately return task failure at the materials stage. The final product-coverage blocker is also run before rendering. This contradicts the intended fail-soft supplemental visual architecture and is the primary behavioral regression to correct. An explicit strict evidence setting should control the gate; default behavior should preserve base generation and attach a warning/coverage status.
+7. **Local editorial fallback is deliberately limited:** the fallback is only invoked when no downloaded materials remain and product identification returns no products. When a named product is detected but no authentic capture is available, the current branch can fail rather than produce a truthful editorial fallback. This is a policy choice, but it must be configurable and cannot block the core engine by default.
+8. **Technical quality checks are scoped to Solo Stack:** missing audio/silent audio, aspect mismatch, and inspection failure are blocking in Solo Stack mode while generic jobs retain non-blocking diagnostics. The principle is reasonable, but inspection failures should be distinguishable from confirmed render defects and the blocking policy should be explicit.
 
 ## Confirmed detailed findings from static source review
 
@@ -91,5 +96,7 @@ Preserve original pipeline functions and default behavior. Add enhancement stage
 6. Verify source/diff, tests, CI, notebook checks, and a Colab end-to-end render separately. Do not claim runtime success without evidence.
 
 ## Status
+
+**Static audit checkpoint:** core integration risks above are confirmed by source comparison. No production code migration has been made because the repository cannot be executed in the available environment; editing pipeline behavior without running its regression suite would violate the clean/no-errors requirement. The next migration should first make the evidence capture/gate fail-soft by default with a dedicated opt-in strict setting, then isolate presenter/graphics and retrieval flags, add regression tests, and obtain CI/runtime evidence.
 
 **Audit in progress.** The root cause of the prior `video_script` NameError has not been established. No fix for that runtime error has been committed.
