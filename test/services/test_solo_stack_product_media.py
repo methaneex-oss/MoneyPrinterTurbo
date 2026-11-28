@@ -6,6 +6,7 @@ from PIL import Image
 from app.services.solo_stack_product_media import (
     PRODUCTS,
     _make_editorial_card,
+    _product_visual_coverage,
     _render_video_capture_clip,
     identify_products,
     interleave_product_visuals,
@@ -25,6 +26,25 @@ def test_identifies_named_products_in_episode_mention_order():
         limit=3,
     )
     assert products == ["Canva", "ChatGPT"]
+
+
+def test_logo_only_asset_does_not_satisfy_product_visual_coverage():
+    logo_only = _product_visual_coverage(
+        ["ChatGPT"],
+        [{"product": "ChatGPT", "asset_type": "logo"}],
+    )
+    assert logo_only[0]["status"] == "missing"
+    assert logo_only[0]["visual_count"] == 0
+
+    with_screenshot = _product_visual_coverage(
+        ["ChatGPT"],
+        [
+            {"product": "ChatGPT", "asset_type": "logo"},
+            {"product": "ChatGPT", "asset_type": "screenshot"},
+        ],
+    )
+    assert with_screenshot[0]["status"] == "available"
+    assert with_screenshot[0]["visual_count"] == 1
 
 
 def test_does_not_add_unmentioned_products_or_guess_from_generic_ai_terms():
@@ -50,6 +70,27 @@ def test_editorial_card_preserves_real_product_image_inside_brand_frame(tmp_path
         assert result.size == (1080, 1920)
         pixel = result.getpixel((0, 0))
         assert max(abs(actual - expected) for actual, expected in zip(pixel, (16, 24, 39))) <= 3
+
+
+def test_portrait_operator_capture_uses_a_tall_mobile_evidence_panel(tmp_path):
+    source = tmp_path / "portrait-app.png"
+    Image.new("RGB", (720, 1280), "#ff0000").save(source)
+    output = tmp_path / "portrait-card.jpg"
+
+    _make_editorial_card(source, output, "Notion", "9:16", "USER-SUPPLIED CAPTURE")
+
+    with Image.open(output).convert("RGB") as result:
+        assert result.size == (1080, 1920)
+        min_x, min_y = result.width, result.height
+        max_x = max_y = -1
+        for y in range(200, 1600):
+            for x in range(80, 1000):
+                red, green, blue = result.getpixel((x, y))
+                if red > 180 and green < 90 and blue < 90:
+                    min_x, min_y = min(min_x, x), min(min_y, y)
+                    max_x, max_y = max(max_x, x), max(max_y, y)
+    assert max_y - min_y > 1100
+    assert max_x - min_x > 600
 
 
 def test_identifies_products_from_a_single_string_term():
@@ -184,6 +225,11 @@ def test_episode_uses_verified_operator_captures_without_launching_browser(tmp_p
         "real app screen capture" in item["search_term"]
         for item in task_manifest["material_sources"]
     )
+    assert all(
+        item["source_kind"] == "solo_stack_product_evidence"
+        for item in task_manifest["material_sources"]
+    )
+    assert all(item["product"] == "ChatGPT" for item in task_manifest["material_sources"])
 
 
 def test_screen_recording_normalizer_preserves_aspect_and_drops_source_audio(tmp_path, monkeypatch):
@@ -209,3 +255,130 @@ def test_screen_recording_normalizer_preserves_aspect_and_drops_source_audio(tmp
     assert "-map" in command and "0:v:0" in command
     assert "-an" in command
     assert output.is_file()
+
+
+def test_identifies_claude_code_and_llama_cpp_as_distinct_official_sources():
+    products = identify_products(
+        "Claude Code vs llama.cpp",
+        "Compare Claude Code in the terminal with local llama.cpp inference.",
+        limit=3,
+    )
+    assert products == ["Claude Code", "llama.cpp"]
+    assert identify_products(
+        "Claude Code vs Claude chat",
+        "Compare Claude Code with the Claude chat assistant.",
+        limit=3,
+    ) == ["Claude Code", "Claude"]
+    assert PRODUCTS["Claude Code"]["domain"] == "claude.com"
+    assert PRODUCTS["llama.cpp"]["url"] == "https://github.com/ggml-org/llama.cpp"
+    assert PRODUCTS["llama.cpp"]["source_label"] == "OFFICIAL PROJECT PAGE"
+    assert PRODUCTS["llama.cpp"]["asset_type"] == "official_project_page_capture"
+
+
+def test_identifies_unlisted_business_apps_from_comparison_title():
+    assert identify_products(
+        "Wave vs Zoho Invoice for freelancers",
+        "Would you trust Wave to send your invoices? Zoho Invoice offers "
+        "another way to manage client billing.",
+        limit=2,
+    ) == ["Wave", "Zoho Invoice"]
+
+
+def test_extracts_products_from_a_category_prefixed_comparison_title():
+    assert identify_products(
+        "Best CRM tools: HubSpot vs Zoho CRM for small businesses",
+        "HubSpot and Zoho CRM are the products in this comparison.",
+        limit=2,
+    ) == ["HubSpot", "Zoho CRM"]
+
+
+def test_identifies_unlisted_apps_from_category_episode_script():
+    assert identify_products(
+        "Best invoicing software for freelancers",
+        "Would you trust Wave to send your invoices? Zoho Invoice can help "
+        "small businesses manage billing.",
+        limit=2,
+    ) == ["Wave", "Zoho Invoice"]
+
+
+def test_discovers_official_site_from_wikidata_without_a_product_catalogue_entry(
+    monkeypatch,
+):
+    from app.services import solo_stack_product_media
+
+    class FakeResponse:
+        def __init__(self, payload):
+            self.payload = payload
+
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return self.payload
+
+    responses = [
+        FakeResponse({
+            "search": [{"id": "Q123", "label": "FreshBooks"}]
+        }),
+        FakeResponse({
+            "entities": {
+                "Q123": {
+                    "claims": {
+                        "P856": [{
+                            "mainsnak": {
+                                "datavalue": {
+                                    "value": "https://www.freshbooks.com/"
+                                }
+                            }
+                        }]
+                    }
+                }
+            }
+        }),
+    ]
+
+    def fake_get(*_args, **_kwargs):
+        return responses.pop(0)
+
+    monkeypatch.setattr(solo_stack_product_media.requests, "get", fake_get)
+    source = solo_stack_product_media.discover_official_product_source("FreshBooks")
+    assert source["url"] == "https://www.freshbooks.com/"
+    assert source["domain"] == "freshbooks.com"
+    assert source["discovery_method"] == "wikidata_official_website_property"
+
+
+def test_discovers_unlisted_business_app_from_search_when_wikidata_has_no_match(
+    monkeypatch,
+):
+    from app.services import solo_stack_product_media
+
+    class FakeResponse:
+        def __init__(self, payload=None, text=""):
+            self.payload = payload or {}
+            self.text = text
+
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return self.payload
+
+    responses = [
+        FakeResponse({"search": []}),
+        FakeResponse(
+            text=(
+                '<a class="result__a" '
+                'href="//duckduckgo.com/l/?uddg=https%3A%2F%2Fwww.freshbooks.com%2F">'
+                "FreshBooks official accounting software</a>"
+            )
+        ),
+    ]
+
+    def fake_get(*_args, **_kwargs):
+        return responses.pop(0)
+
+    monkeypatch.setattr(solo_stack_product_media.requests, "get", fake_get)
+    source = solo_stack_product_media.discover_official_product_source("FreshBooks")
+    assert source["url"] == "https://www.freshbooks.com/"
+    assert source["domain"] == "freshbooks.com"
+    assert source["discovery_method"] == "duckduckgo_result_candidate"

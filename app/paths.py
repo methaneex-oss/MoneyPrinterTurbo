@@ -50,13 +50,24 @@ def _copy_missing_resource(source: Path, target: Path) -> None:
         with os.fdopen(fd, "wb") as destination, source.open("rb") as origin:
             shutil.copyfileobj(origin, destination)
         try:
-            # Windows rename 拒绝覆盖；POSIX 使用硬链接实现同样的独占发布。
+            # Prefer an atomic, no-overwrite hard-link publish on filesystems that support it.
             if os.name == "nt":
                 os.rename(temporary, target)
             else:
                 os.link(temporary, target)
         except FileExistsError:
             pass
+        except OSError:
+            # Drive/FUSE and some network filesystems reject hard links (EPERM/EOPNOTSUPP).
+            # Fall back to an exclusive destination create so we never overwrite a user file.
+            try:
+                with target.open("xb") as destination, Path(temporary).open("rb") as origin:
+                    shutil.copyfileobj(origin, destination)
+            except FileExistsError:
+                pass
+            except Exception:
+                target.unlink(missing_ok=True)
+                raise
     finally:
         Path(temporary).unlink(missing_ok=True)
 

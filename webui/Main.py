@@ -14,6 +14,7 @@ import webbrowser
 from collections.abc import Mapping
 from datetime import datetime
 from pathlib import Path
+from urllib.parse import urlparse
 from uuid import UUID, uuid4
 
 import requests
@@ -153,6 +154,44 @@ VIDEO_SOURCE_GROUPS = {
     "ai_image": ("openai_image", "codex_image", "useapi_image"),
     "local": ("local",),
 }
+
+
+def _is_loopback_http_url(value):
+    try:
+        parsed = urlparse(str(value or "").strip())
+    except ValueError:
+        return False
+    return (
+        parsed.scheme == "http"
+        and parsed.hostname in {"127.0.0.1", "localhost", "::1"}
+    )
+
+
+def _available_video_source_groups(settings=None):
+    settings = settings or config.snapshot_config_with_pending(config.app)
+    groups = dict(VIDEO_SOURCE_GROUPS)
+    allow_animatediff = bool(settings.get("allow_unverified_animatediff", False))
+    free_only = bool(
+        settings.get("solo_stack_free_only", settings.get("solo_stack_mode", False))
+    )
+    if free_only:
+        # Solo Stack's normal production path is restricted to the configured
+        # free Pixabay source, user-supplied media and a warmed loopback image server.
+        groups["stock_video"] = ("pixabay",)
+        groups["ai_video"] = ("animatediff",) if allow_animatediff else ()
+        local_image_ready = (
+            bool(settings.get("solo_stack_local_image_ready", False))
+            and _is_loopback_http_url(settings.get("openai_image_base_url"))
+        )
+        groups["ai_image"] = ("openai_image",) if local_image_ready else ()
+    elif not allow_animatediff:
+        groups["ai_video"] = tuple(
+            provider for provider in groups["ai_video"]
+            if provider != "animatediff"
+        )
+    return groups
+
+
 # Upload-Post 的 API Key 与发布用户分别在两个页面管理，并且发布用户名称
 # 不等于登录邮箱。集中维护入口可以避免多语言文案各自硬编码 URL 后发生偏差，
 # 也方便用户从 WebUI 直接完成首次配置和后续账号维护。
@@ -3416,7 +3455,7 @@ def _remember_material_provider(group, widget_key):
 def _initialize_material_navigation(target, settings):
     groups = {
         group: providers
-        for group, providers in VIDEO_SOURCE_GROUPS.items()
+        for group, providers in _available_video_source_groups(settings).items()
         if group != "local"
     }
     source = settings.get("video_source", "pexels")
@@ -3458,7 +3497,7 @@ def _material_provider_labels():
         "wavespeed": tr("WaveSpeed AI Video"),
         "muapi": tr("MuAPI AI Video"),
         "useapi": tr("useapi.net AI Video"),
-        "animatediff": tr("Local AnimateDiff (Free GPU)"),
+        "animatediff": tr("Experimental Local AnimateDiff (License Unverified)"),
         "openai_image": tr("OpenAI Compatible Text-to-Image"),
         "codex_image": tr("codex.image.label"),
         "useapi_image": tr("useapi.net Nano Banana Images"),
@@ -3486,7 +3525,7 @@ def _general_provider_readiness(settings):
     return {
         "llm": configured_llm_providers(settings, oauth),
         **configured_material_providers(
-            settings, VIDEO_SOURCE_GROUPS, oauth["openai_codex"]
+            settings, _available_video_source_groups(settings), oauth["openai_codex"]
         ),
     }
 
@@ -3525,11 +3564,53 @@ def _activate_general_provider(section):
 
 
 def _render_general_settings(settings):
+    available_groups = _available_video_source_groups(settings)
+    available_sources = {
+        provider
+        for providers in available_groups.values()
+        for provider in providers
+    }
+    if bool(
+        settings.get("solo_stack_free_only", settings.get("solo_stack_mode", False))
+    ):
+        # Local operator-supplied media is not a remote provider group, but it
+        # remains an allowed source under the free-only production policy.
+        available_sources.add("local")
+    if settings.get("video_source") not in available_sources:
+        settings = dict(settings)
+        settings["video_source"] = "pixabay"
+        _set_runtime_config("app", "video_source", "pixabay")
+        available_groups = _available_video_source_groups(settings)
+    free_only = bool(
+        settings.get("solo_stack_free_only", settings.get("solo_stack_mode", False))
+    )
+    if free_only and settings.get("llm_provider") not in {"openrouter", "ollama"}:
+        settings = dict(settings)
+        settings["llm_provider"] = "openrouter"
+        _set_runtime_config("app", "llm_provider", "openrouter")
+    if free_only and settings.get("llm_provider") == "openrouter":
+        openrouter = get_llm_provider("openrouter")
+        model_key = openrouter.config_key("model_name")
+        effective_model = openrouter.resolve_model_name(
+            str(settings.get(model_key) or "")
+        )
+        if not effective_model.lower().endswith(":free"):
+            settings = dict(settings)
+            settings[model_key] = openrouter.default_model
+            _set_runtime_config("app", model_key, openrouter.default_model)
     configured = _general_provider_readiness(settings)
+    if free_only:
+        st.caption(
+            "Solo Stack free-only policy: Pixabay, user media and a warmed local "
+            "image server are available for visuals; paid video/image providers "
+            "are hidden. Script generation requires an OpenRouter :free model "
+            "or local Ollama, and narration requires local Kokoro."
+        )
     material_labels = _material_provider_labels()
     llm_labels = {
         provider.provider_id: get_llm_provider_label(provider)
         for provider in LLM_PROVIDER_REGISTRY
+        if not free_only or provider.provider_id in {"openrouter", "ollama"}
     }
     st.subheader(tr("General Providers Title"))
     st.caption(tr("General Providers Help"))
@@ -3548,7 +3629,7 @@ def _render_general_settings(settings):
             if section == "llm"
             else settings.get("video_source", "pexels")
         )
-        is_active_category = section == "llm" or active in VIDEO_SOURCE_GROUPS[section]
+        is_active_category = section == "llm" or active in available_groups[section]
         options = configured[section]
         widget_key = localized_widget_key(f"settings_general_{section}_provider_select")
         memory_key = f"settings_general_{section}_provider"
@@ -3650,10 +3731,17 @@ def _save_settings_api_keys(config_key, widget_key):
 def _render_material_provider_settings(provider):
     app_settings = config.snapshot_config_with_pending(config.app)
     if provider == "animatediff":
-        st.markdown("**Local AnimateDiff (Free GPU)**")
-        st.caption(
-            "Uses the local Colab CUDA runtime and open model weights. "
-            "No API key, hosted inference endpoint, or paid fallback is used."
+        if not bool(app_settings.get("allow_unverified_animatediff", False)):
+            st.warning(
+                "AnimateDiff is disabled because the adapter's commercial-use "
+                "license has not been verified. It is hidden from normal source selection."
+            )
+            return
+        st.markdown("**Experimental Local AnimateDiff (License Unverified)**")
+        st.warning(
+            "Do not use in production until the model-weight license is reviewed and permits the intended use. "
+            "Do not use these weights in monetized production until the "
+            "authoritative model-weight license is verified."
         )
         status = local_animatediff.health_check()
         if status:
@@ -3667,7 +3755,7 @@ def _render_material_provider_settings(provider):
                 "Not running. Start the AnimateDiff setup cell in the Colab notebook "
                 "and wait for the model warm-up to finish."
             )
-    elif provider in VIDEO_SOURCE_GROUPS["stock_video"]:
+    elif provider in _available_video_source_groups(app_settings)["stock_video"]:
         labels = {
             "pexels": "Pexels API Key",
             "pixabay": "Pixabay API Key",
@@ -5012,7 +5100,7 @@ def _render_settings_dialog():
                     st.session_state.get("settings_material_providers", {})
                 )
                 for group, title_key, help_key in sections:
-                    providers = VIDEO_SOURCE_GROUPS[group]
+                    providers = _available_video_source_groups(app_settings)[group]
                     default_provider = remembered.get(group, providers[0])
                     if default_provider not in providers:
                         default_provider = providers[0]
@@ -6155,24 +6243,33 @@ def _render_video_settings(panel, params):
                 "metaso_minimax": tr("Metaso MiniMax H3"),
                 "muapi": tr("MuAPI AI Video"),
                 "useapi": tr("useapi.net AI Video"),
-                "animatediff": tr("Local AnimateDiff (Free GPU)"),
+                "animatediff": tr("Experimental Local AnimateDiff (License Unverified)"),
                 "loomloom": tr("Shengsuan Cloud AI Video"),
                 "openai_image": tr("OpenAI Compatible Text-to-Image"),
                 "codex_image": tr("codex.image.label"),
                 "useapi_image": tr("useapi.net Nano Banana Images"),
                 "local": tr("Local file"),
             }
+            source_settings = config.snapshot_config_with_pending(config.app)
+            available_video_source_groups = _available_video_source_groups(source_settings)
             saved_video_source_name = str(
-                config.snapshot_config_with_pending(config.app).get("video_source", "pexels")
-                or "pexels"
+                source_settings.get("video_source", "pexels") or "pexels"
             )
+            available_sources = {
+                provider
+                for providers in available_video_source_groups.values()
+                for provider in providers
+            }
+            if saved_video_source_name not in available_sources:
+                saved_video_source_name = "pixabay"
+                _set_runtime_config("app", "video_source", saved_video_source_name)
             params.video_source = grouped_selectbox(
                 tr("Video Source"),
                 groups=(
-                    (tr("Stock Video"), VIDEO_SOURCE_GROUPS["stock_video"]),
-                    (tr("AI Video"), VIDEO_SOURCE_GROUPS["ai_video"]),
-                    (tr("AI Image"), VIDEO_SOURCE_GROUPS["ai_image"]),
-                    (tr("Local Material"), VIDEO_SOURCE_GROUPS["local"]),
+                    (tr("Stock Video"), available_video_source_groups["stock_video"]),
+                    (tr("AI Video"), available_video_source_groups["ai_video"]),
+                    (tr("AI Image"), available_video_source_groups["ai_image"]),
+                    (tr("Local Material"), available_video_source_groups["local"]),
                 ),
                 default_value=saved_video_source_name,
                 key="video_source_select",
@@ -6198,12 +6295,22 @@ def _render_video_settings(panel, params):
                     "Generated illustrations are not accepted as real product evidence."
                 )
                 capture_product = st.text_input(
-                    "Product name", key="solo_stack_capture_product"
+                    "Product name",
+                    key="solo_stack_capture_product",
+                    help=(
+                        "Use the supported product's exact name, for example "
+                        "ChatGPT, Claude, Notion, Canva, Grammarly, Zapier, or Cursor."
+                    ),
                 )
                 capture_type = st.selectbox(
                     "Asset type",
                     ["screenshot", "screen_recording", "demo_media", "logo"],
                     key="solo_stack_capture_type",
+                    help=(
+                        "Logos are stored as brand references but do not satisfy "
+                        "the product-evidence gate. Use Screenshot or Screen Recording "
+                        "to prove the actual product interface."
+                    ),
                 )
                 capture_source = st.text_input(
                     "Official source page (optional)", key="solo_stack_capture_source"
@@ -7979,6 +8086,15 @@ def _render_background_music_settings(params, elevenlabs_api_key_rendered=False)
         (tr("Sonilo Background Music"), "sonilo"),
         (tr("ElevenLabs Background Music"), "elevenlabs"),
     ]
+    if bool(
+        config.app.get(
+            "solo_stack_free_only", config.app.get("solo_stack_mode", False)
+        )
+    ):
+        bgm_options = [
+            option for option in bgm_options
+            if option[1] not in {"sonilo", "elevenlabs"}
+        ]
     selected_bgm_type = stable_selectbox(
         tr("Background Music Source"),
         options=[value for _, value in bgm_options],
@@ -8308,7 +8424,19 @@ def _render_audio_settings(panel, params):
                     if saved_tts_server == voice.NO_VOICE_NAME
                     else VOICE_MODE_TTS
                 )
-            voice_mode_options = [VOICE_MODE_TTS, VOICE_MODE_UPLOAD, VOICE_MODE_NONE]
+            free_only_voice = bool(
+                config.app.get(
+                    "solo_stack_free_only", config.app.get("solo_stack_mode", False)
+                )
+            )
+            voice_mode_options = (
+                [VOICE_MODE_TTS, VOICE_MODE_UPLOAD]
+                if free_only_voice
+                else [VOICE_MODE_TTS, VOICE_MODE_UPLOAD, VOICE_MODE_NONE]
+            )
+            if free_only_voice and saved_voice_mode == VOICE_MODE_NONE:
+                saved_voice_mode = VOICE_MODE_TTS
+                _set_runtime_config("ui", "voice_mode", VOICE_MODE_TTS)
             voice_mode_labels = {
                 VOICE_MODE_TTS: tr("Automatic Voiceover"),
                 VOICE_MODE_UPLOAD: tr("Upload Voiceover"),
@@ -8327,23 +8455,26 @@ def _render_audio_settings(panel, params):
 
             # Provider 下拉只负责选择自动配音服务；无配音已经由上方模式控制，
             # 不再作为 TTS Provider 混入列表，避免两个入口表达同一状态。
-            tts_servers = [
-                ("azure-tts-v1", "Azure TTS V1 (Edge TTS)"),
-                ("azure-tts-v2", "Azure TTS V2"),
-                ("siliconflow", "SiliconFlow TTS"),
-                ("gemini-tts", "Google Gemini TTS"),
-                ("mimo-tts", "Xiaomi MiMo TTS"),
-                ("minimax-tts", "MiniMax TTS"),
-                ("elevenlabs", "ElevenLabs TTS"),
-                ("chatterbox", "Chatterbox TTS"),
-                ("kokoro", "Kokoro TTS"),
-                ("fish_audio", "Fish Audio TTS"),
-                ("voxcpm", "VoxCPM TTS"),
-            ]
+            if free_only_voice:
+                tts_servers = [("kokoro", "Kokoro TTS (Local)")]
+            else:
+                tts_servers = [
+                    ("azure-tts-v1", "Azure TTS V1 (Edge TTS)"),
+                    ("azure-tts-v2", "Azure TTS V2"),
+                    ("siliconflow", "SiliconFlow TTS"),
+                    ("gemini-tts", "Google Gemini TTS"),
+                    ("mimo-tts", "Xiaomi MiMo TTS"),
+                    ("minimax-tts", "MiniMax TTS"),
+                    ("elevenlabs", "ElevenLabs TTS"),
+                    ("chatterbox", "Chatterbox TTS"),
+                    ("kokoro", "Kokoro TTS"),
+                    ("fish_audio", "Fish Audio TTS"),
+                    ("voxcpm", "VoxCPM TTS"),
+                ]
 
             tts_server_values = [server_value for server_value, _ in tts_servers]
             if saved_tts_server not in tts_server_values:
-                saved_tts_server = "azure-tts-v1"
+                saved_tts_server = "kokoro" if free_only_voice else "azure-tts-v1"
 
             if tts_mode_enabled:
                 selected_tts_server = stable_selectbox(

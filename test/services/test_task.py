@@ -1,4 +1,5 @@
 import unittest
+from types import SimpleNamespace
 import os
 import shutil
 import sys
@@ -90,6 +91,394 @@ class TestTaskService(unittest.TestCase):
             custom_system_prompt="Only write short narration.",
         )
 
+    def test_generate_script_includes_current_operator_evidence_context(self):
+        params = VideoParams(
+            video_subject="ChatGPT meeting notes for freelancers",
+            video_script="",
+        )
+        evidence = [{
+            "product": "ChatGPT",
+            "claim": "The Free plan has a documented usage limit.",
+            "value": "Operator-recorded current value",
+            "currency": None,
+            "plan": "Free",
+            "publisher": "OpenAI",
+            "checked_at": "2026-11-24",
+            "source_url": "https://chatgpt.com/pricing/",
+            "is_current": True,
+        }]
+
+        with (
+            patch.dict(tm.config.app, {"solo_stack_mode": True, "solo_stack_free_only": False}),
+            patch.object(tm, "_solo_stack_evidence_records", return_value=evidence),
+            patch.object(
+                tm.llm, "generate_script", return_value="A valid generated script."
+            ) as generate,
+        ):
+            result = tm.generate_script("solo-stack-evidence-prompt", params)
+
+        self.assertEqual(result, "A valid generated script.")
+        prompt = generate.call_args.kwargs["video_script_prompt"]
+        self.assertIn("OPERATOR-RECORDED SOURCE DATA", prompt)
+        self.assertIn("Operator-recorded current value", prompt)
+        self.assertIn("not independent verification", prompt)
+        self.assertIn("Do not invent prices, plan limits, features, or sources", prompt)
+        self.assertLessEqual(len(prompt), tm.llm.MAX_SCRIPT_PROMPT_LENGTH)
+
+    def test_generate_script_warns_against_unsourced_prices_when_evidence_is_missing(self):
+        params = VideoParams(video_subject="Canva pricing", video_script="")
+
+        with (
+            patch.dict(tm.config.app, {"solo_stack_mode": True, "solo_stack_free_only": False}),
+            patch.object(tm, "_solo_stack_evidence_records", return_value=[]),
+            patch.object(tm.llm, "generate_script", return_value="A generated script.") as generate,
+        ):
+            tm.generate_script("solo-stack-no-evidence", params)
+
+        prompt = generate.call_args.kwargs["video_script_prompt"]
+        self.assertIn("No current operator-recorded source evidence", prompt)
+        self.assertIn("Do not state exact prices, plan limits", prompt)
+
+    def test_paid_llm_is_blocked_before_script_or_term_requests(self):
+        app_config = {
+            "solo_stack_mode": True,
+            "solo_stack_free_only": True,
+            "llm_provider": "openrouter",
+            "openrouter_model_name": "openai/gpt-4o",
+        }
+        script_params = SimpleNamespace(
+            video_script="",
+            video_script_prompt="",
+            video_subject="ChatGPT workflow",
+        )
+        with (
+            patch.dict(tm.config.app, app_config),
+            patch.object(tm, "_solo_stack_evidence_records", return_value=[]),
+            patch.object(tm.llm, "generate_script") as generate_script,
+            self.assertRaisesRegex(RuntimeError, "OpenRouter"),
+        ):
+            tm.generate_script("paid-script-task", script_params)
+        generate_script.assert_not_called()
+
+        term_params = SimpleNamespace(
+            video_terms=[],
+            video_subject="ChatGPT workflow",
+            match_materials_to_script=True,
+        )
+        with (
+            patch.dict(tm.config.app, app_config),
+            patch.object(tm.llm, "generate_terms") as generate_terms,
+            self.assertRaisesRegex(RuntimeError, "OpenRouter"),
+        ):
+            tm.generate_terms("paid-terms-task", term_params, "A script.")
+        generate_terms.assert_not_called()
+
+    def test_paid_tts_is_blocked_before_voice_request(self):
+        params = SimpleNamespace(
+            custom_audio_file="",
+            voice_name="fish_audio:paid-voice",
+        )
+        with (
+            patch.dict(
+                tm.config.app,
+                {"solo_stack_mode": True, "solo_stack_free_only": True},
+            ),
+            patch.object(tm, "resolve_custom_audio_file", return_value=""),
+            patch.object(tm, "_mark_task_failed") as mark_failed,
+            patch.object(tm.voice, "tts") as tts,
+        ):
+            result = tm.generate_audio("paid-tts-task", params, "Test narration.")
+
+        self.assertEqual(result, (None, None, None))
+        mark_failed.assert_called_once()
+        tts.assert_not_called()
+
+    def test_missing_product_visuals_block_solo_stack_release(self):
+        with tempfile.TemporaryDirectory() as directory:
+            Path(directory, "script.json").write_text(
+                '{"product_visual_coverage":['
+                '{"product":"ChatGPT","visual_count":0,"status":"missing"}]}',
+                encoding="utf-8",
+            )
+            with patch.object(tm.utils, "task_dir", return_value=directory):
+                blockers = tm._solo_stack_product_visual_blockers("visual-task")
+
+        self.assertEqual(blockers, ["missing_product_visuals:ChatGPT"])
+
+    def test_available_product_visuals_do_not_block_solo_stack_release(self):
+        with tempfile.TemporaryDirectory() as directory:
+            Path(directory, "script.json").write_text(
+                '{"product_visual_coverage":['
+                '{"product":"ChatGPT","visual_count":2,"status":"available"}]}',
+                encoding="utf-8",
+            )
+            with patch.object(tm.utils, "task_dir", return_value=directory):
+                blockers = tm._solo_stack_product_visual_blockers("visual-task")
+
+        self.assertEqual(blockers, [])
+
+    def test_named_product_without_coverage_fails_closed(self):
+        with tempfile.TemporaryDirectory() as directory:
+            Path(directory, "script.json").write_text(
+                '{"script":"Canva can turn a rough brief into a finished design.",'
+                '"params":{"video_subject":"Canva workflow"}}',
+                encoding="utf-8",
+            )
+            with patch.object(tm.utils, "task_dir", return_value=directory):
+                blockers = tm._solo_stack_product_visual_blockers("visual-task")
+
+        self.assertEqual(blockers, ["product_visual_coverage_unavailable"])
+
+    def test_product_named_in_search_terms_requires_visual_coverage(self):
+        with tempfile.TemporaryDirectory() as directory:
+            Path(directory, "script.json").write_text(
+                '{"script":"A practical design workflow.",'
+                '"params":{"video_subject":"Freelance design workflow"},'
+                '"search_terms":["Canva editor interface"]}',
+                encoding="utf-8",
+            )
+            with patch.object(tm.utils, "task_dir", return_value=directory):
+                blockers = tm._solo_stack_product_visual_blockers("visual-task")
+
+        self.assertEqual(blockers, ["product_visual_coverage_unavailable"])
+
+    def test_product_coverage_missing_a_named_product_blocks_release(self):
+        with tempfile.TemporaryDirectory() as directory:
+            Path(directory, "script.json").write_text(
+                '{"script":"Compare ChatGPT and Claude for research.",'
+                '"params":{"video_subject":"ChatGPT vs Claude"},'
+                '"product_visual_coverage":['
+                '{"product":"ChatGPT","visual_count":2,"status":"available"}]}',
+                encoding="utf-8",
+            )
+            with patch.object(tm.utils, "task_dir", return_value=directory):
+                blockers = tm._solo_stack_product_visual_blockers("visual-task")
+
+        self.assertEqual(blockers, ["missing_product_visuals:Claude"])
+
+    def test_malformed_product_coverage_blocks_release(self):
+        with tempfile.TemporaryDirectory() as directory:
+            Path(directory, "script.json").write_text(
+                '{"product_visual_coverage":[null]}',
+                encoding="utf-8",
+            )
+            with patch.object(tm.utils, "task_dir", return_value=directory):
+                blockers = tm._solo_stack_product_visual_blockers("visual-task")
+
+        self.assertEqual(blockers, ["product_visual_coverage_unavailable"])
+
+    def test_no_supported_product_does_not_require_product_visuals(self):
+        with tempfile.TemporaryDirectory() as directory:
+            Path(directory, "script.json").write_text(
+                '{"script":"A practical guide to better client onboarding.",'
+                '"params":{"video_subject":"Client onboarding workflow"}}',
+                encoding="utf-8",
+            )
+            with patch.object(tm.utils, "task_dir", return_value=directory):
+                blockers = tm._solo_stack_product_visual_blockers("visual-task")
+
+        self.assertEqual(blockers, [])
+
+    def test_solo_stack_free_only_blocks_external_music_providers(self):
+        params = SimpleNamespace(bgm_type="elevenlabs", bgm_volume=0.2)
+        with (
+            patch.dict(
+                tm.config.app,
+                {"solo_stack_mode": True, "solo_stack_free_only": True},
+            ),
+            patch.object(tm.bgm_service, "should_use_bgm", return_value=True),
+        ):
+            self.assertIsNotNone(tm._solo_stack_free_bgm_error(params))
+
+        params.bgm_type = "random"
+        with patch.dict(
+            tm.config.app,
+            {"solo_stack_mode": True, "solo_stack_free_only": True},
+        ):
+            self.assertIsNone(tm._solo_stack_free_bgm_error(params))
+
+    def test_paid_video_provider_is_blocked_before_provider_request(self):
+        params = SimpleNamespace(video_source="ofox")
+        with (
+            patch.dict(
+                tm.config.app,
+                {"solo_stack_mode": True, "solo_stack_free_only": True},
+            ),
+            patch.object(tm, "_mark_task_failed") as mark_failed,
+            patch.object(tm.ofox, "generate_videos") as generate,
+        ):
+            result = tm.get_video_materials(
+                "paid-video-task", params, ["scene"], 10
+            )
+
+        self.assertIsNone(result)
+        mark_failed.assert_called_once()
+        generate.assert_not_called()
+
+    def test_solo_stack_free_only_allows_openrouter_free_or_local_ollama(self):
+        with patch.dict(
+            tm.config.app,
+            {
+                "llm_provider": "openrouter",
+                "openrouter_model_name": "minimax/minimax-m3:free",
+            },
+        ):
+            self.assertIsNone(tm._solo_stack_free_llm_error())
+
+        with patch.dict(
+            tm.config.app,
+            {
+                "llm_provider": "openrouter",
+                "openrouter_model_name": "openai/gpt-4o",
+            },
+        ):
+            self.assertIsNotNone(tm._solo_stack_free_llm_error())
+
+    def test_solo_stack_free_only_requires_local_image_and_kokoro_endpoints(self):
+        params = SimpleNamespace(video_source="openai_image")
+        with patch.dict(
+            tm.config.app,
+            {
+                "solo_stack_local_image_ready": True,
+                "openai_image_base_url": "http://127.0.0.1:7861/v1",
+            },
+        ):
+            self.assertIsNone(tm._solo_stack_free_video_error(params))
+
+        with patch.dict(
+            tm.config.app,
+            {
+                "solo_stack_local_image_ready": True,
+                "openai_image_base_url": "https://api.openai.com/v1",
+            },
+        ):
+            self.assertIsNotNone(tm._solo_stack_free_video_error(params))
+
+        with patch.dict(
+            tm.config.kokoro,
+            {"base_url": "http://127.0.0.1:8880/v1"},
+        ):
+            self.assertIsNone(
+                tm._solo_stack_free_voice_error(
+                    SimpleNamespace(voice_name="kokoro:am_michael")
+                )
+            )
+            self.assertIsNotNone(
+                tm._solo_stack_free_voice_error(
+                    SimpleNamespace(voice_name="fish_audio:paid-voice")
+                )
+            )
+
+    def test_unlicensed_local_animatediff_is_blocked_without_explicit_opt_in(self):
+        params = SimpleNamespace(video_source="animatediff")
+        with (
+            patch.dict(tm.config.app, {"allow_unverified_animatediff": False}),
+            patch.object(tm, "_mark_task_failed") as mark_failed,
+            patch.object(tm.local_animatediff, "generate_videos") as generate,
+        ):
+            result = tm.get_video_materials(
+                "disabled-animatediff-task", params, ["scene"], 10
+            )
+
+        self.assertIsNone(result)
+        mark_failed.assert_called_once()
+        generate.assert_not_called()
+
+    def test_solo_stack_quality_gate_blocks_critical_audio_and_aspect_flags(self):
+        report = {
+            "flags": [
+                "repeated_visuals",
+                "missing_audio",
+                "unexpected_aspect_ratio",
+            ]
+        }
+        self.assertEqual(
+            tm._solo_stack_quality_blockers(report),
+            ["missing_audio", "unexpected_aspect_ratio"],
+        )
+        self.assertEqual(tm._solo_stack_quality_blockers({"flags": []}), [])
+
+    def test_save_script_data_includes_solo_stack_editorial_review(self):
+        params = VideoParams(video_subject="ChatGPT meeting notes for freelancers")
+        script = (
+            "Can ChatGPT turn a messy meeting into clear client action items? "
+            "We will test it with a realistic transcript, then inspect the summary, "
+            "action owners, deadlines and missing details. The goal is to see whether "
+            "a freelancer can rely on the result without spending more time correcting "
+            "it than writing notes manually. We will separate useful features from "
+            "unsupported marketing promises."
+        )
+
+        evidence = [{
+            "claim_id": "chatgpt-plan-limit",
+            "product": "ChatGPT",
+            "claim": "Operator-recorded plan limit.",
+            "source_url": "https://chatgpt.com/pricing/",
+            "publisher": "OpenAI",
+            "checked_at": "2026-11-24",
+            "is_current": True,
+        }]
+        with (
+            patch.dict(tm.config.app, {"solo_stack_mode": True, "solo_stack_free_only": False}),
+            patch.object(
+                tm, "_solo_stack_evidence_records", return_value=evidence
+            ),
+            patch.object(tm.task_artifacts, "write_script_data") as write_data,
+        ):
+            tm.save_script_data("solo-stack-review-task", script, "", params)
+
+        payload = write_data.call_args.args[1]
+        self.assertTrue(payload["solo_stack_review"]["opening_hook"]["is_question"])
+        self.assertTrue(
+            payload["solo_stack_review"]["opening_hook"]["topic_specificity_confirmed"]
+        )
+        self.assertEqual(
+            payload["solo_stack_review"]["fact_check_status"],
+            "not_independently_verified",
+        )
+        self.assertEqual(payload["solo_stack_evidence"], evidence)
+
+    def test_generate_final_videos_passes_script_to_solo_stack_director(self):
+        """Presenter direction must be planned from the script in this render scope."""
+        params = VideoParams(video_subject="AI changing everyday life", video_count=1)
+        script = "From your phone to your workplace, AI is changing daily life."
+
+        with (
+            patch.object(
+                tm.config.app,
+                "get",
+                side_effect=lambda key, default=None: (
+                    True if key == "solo_stack_mode" else default
+                ),
+            ),
+            patch.object(
+                tm.solo_stack_director,
+                "plan_performance",
+                return_value={"action": "explain"},
+            ) as plan,
+            patch.object(tm.video, "combine_videos") as combine,
+            patch.object(tm.video, "generate_video"),
+            patch.object(tm, "inspect_video_quality", return_value={"flags": []}),
+            patch.object(tm, "_solo_stack_product_visual_blockers", return_value=[]),
+            patch.object(tm.task_artifacts, "patch_script_data"),
+            patch.object(tm.sm.state, "update_task"),
+        ):
+            tm.generate_final_videos(
+                task_id="presenter-script-scope",
+                params=params,
+                downloaded_videos=["material.mp4"],
+                audio_file="audio.mp3",
+                subtitle_path="",
+                audio_duration=5,
+                video_script=script,
+            )
+
+        plan.assert_called_once_with(script, params.video_subject)
+        self.assertEqual(
+            combine.call_args.kwargs["presenter_direction"],
+            {"action": "explain"},
+        )
+
     def test_generate_final_videos_forwards_clip_speed_and_fit_mode(self):
         """任务编排层必须把画面速度和适配模式传给视频合成服务。"""
         params = VideoParams(
@@ -118,6 +507,42 @@ class TestTaskService(unittest.TestCase):
             combine_videos.call_args.kwargs["video_fit_mode"],
             params.video_fit_mode,
         )
+
+    def test_scene_labels_exclude_solo_stack_product_evidence(self):
+        """Product screenshots/recordings must remain unobstructed by host graphics."""
+        with tempfile.TemporaryDirectory() as directory:
+            manifest = {
+                "script": "We compare ChatGPT with the workflow.",
+                "material_sources": [
+                    {"local_file": "stock.mp4", "search_term": "freelance workflow"},
+                    {
+                        "local_file": "chatgpt.mp4",
+                        "search_term": "ChatGPT real app screen capture",
+                        "source_kind": "solo_stack_product_evidence",
+                        "product": "ChatGPT",
+                    },
+                ],
+            }
+            Path(directory, "script.json").write_text(
+                __import__("json").dumps(manifest), encoding="utf-8"
+            )
+            with (
+                patch.object(tm.utils, "task_dir", return_value=directory),
+                patch.object(
+                    tm.scene_planner, "build_scene_labels",
+                    return_value={"stock.mp4": "freelance workflow"},
+                ) as build_labels,
+            ):
+                result = tm._get_material_scene_labels(
+                    "solo-stack-evidence-task",
+                    ["stock.mp4", "chatgpt.mp4"],
+                )
+
+        build_labels.assert_called_once_with(
+            "We compare ChatGPT with the workflow.",
+            {"stock.mp4": "freelance workflow"},
+        )
+        self.assertEqual(result, {"stock.mp4": "freelance workflow"})
 
     def test_semantic_footage_check_only_inspects_selected_sources(self):
         """Semantic QA must inspect compositor-selected clips, not unused candidates."""

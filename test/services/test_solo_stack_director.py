@@ -1,6 +1,5 @@
 from app.services.solo_stack_director import plan_performance
 
-
 def test_same_character_identity_gets_different_scene_performance():
     curious = plan_performance(
         "Can this AI actually save a freelancer time? Let's test the workflow.",
@@ -14,7 +13,6 @@ def test_same_character_identity_gets_different_scene_performance():
     assert curious["expression"] != skeptical["expression"]
     assert curious["wardrobe"] == skeptical["wardrobe"] == "smart"
 
-
 def test_director_is_reproducible_and_uses_topic_context():
     script = "Can this tool turn a messy meeting into clear action items?"
     first = plan_performance(script, "Meeting notes")
@@ -22,7 +20,6 @@ def test_director_is_reproducible_and_uses_topic_context():
     assert first == second
     assert first["emotion"] == "curious"
     assert first["action"] == "question"
-
 
 def test_director_does_not_force_one_fixed_action():
     scripts = [
@@ -33,3 +30,16 @@ def test_director_does_not_force_one_fixed_action():
     ]
     actions = {plan_performance(script, topic)["action"] for script, topic in scripts}
     assert len(actions) >= 3
+
+def test_neutral_scene_fallback_includes_a_distinct_two_handed_shrug():
+    from unittest.mock import patch
+
+    from app.services.solo_stack_director import plan_scene_performance
+
+    with patch(
+        "app.services.solo_stack_director.plan_performance",
+        return_value={"emotion": "explaining", "action": "talk"},
+    ):
+        result = plan_scene_performance("Subscription comparison", 3, {})
+    assert result["action"] == "shrug"
+    assert result["expression"] == "skeptical"

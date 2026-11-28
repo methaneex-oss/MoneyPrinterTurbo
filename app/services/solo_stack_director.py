@@ -91,6 +91,7 @@ _SCENE_FALLBACKS = (
     ("present", "talk", "evidence"),
     ("question", "curious", "camera"),
     ("think", "thoughtful", "up"),
+    ("shrug", "skeptical", "camera"),
 )
 
 

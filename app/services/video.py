@@ -979,6 +979,15 @@ def _fit_clip_to_canvas(
     ).with_duration(clip.duration)
 
 
+def _select_presenter_scene_indices(scene_label_by_index: dict[int, str]) -> set[int]:
+    """Select alternating labelled scenes, beginning with the first eligible scene."""
+    eligible = sorted(
+        index for index, label in scene_label_by_index.items()
+        if isinstance(label, str) and label.strip()
+    )
+    return set(eligible[::2])
+
+
 def combine_videos(
     combined_video_path: str,
     video_paths: List[str],
@@ -1121,6 +1130,10 @@ def combine_videos(
         [item.source_file_path for item in subclipped_items],
         scene_labels,
     )
+    presenter_scene_indices = (
+        _select_presenter_scene_indices(scene_label_by_index)
+        if solo_stack_presenter_enabled else set()
+    )
 
     # Sequential mode appends its later slices after this index. They only fill
     # narration that the first slices leave uncovered.
@@ -1196,7 +1209,7 @@ def combine_videos(
             # video into a talking-head overlay. Alternate host-led beats with
             # unobstructed evidence footage; each appearance is brief and
             # direction is derived from this scene's grounded label.
-            if solo_stack_presenter_enabled and index % 2 == 0:
+            if solo_stack_presenter_enabled and index in presenter_scene_indices:
                 scene_direction = presenter_direction
                 if scene_label:
                     try:
@@ -1225,6 +1238,7 @@ def combine_videos(
                     clip,
                     expression="talk",
                     acting_direction=scene_direction,
+                    corner="auto",
                     max_duration=3.5,
                     duration_fraction=0.46,
                     audio_activity=audio_activity,

@@ -1,15 +1,16 @@
 import json
+from datetime import date, timedelta
 from pathlib import Path
 
 import pytest
 from PIL import Image
 
 from app.services.solo_stack_assets import (
-    SoloStackAssetError, add_evidence, register_asset, validate_source_url, verify_asset,
+    SoloStackAssetError, add_evidence, evidence_for_products, register_asset,
+    validate_source_url, verify_asset,
 )
 from app.services.solo_stack_presenter import BRAND, build_presenter_frame
 from app.services import task
-
 
 def test_presenter_frames_are_deterministic_and_transparent():
     first = build_presenter_frame(0.5, (240, 280), "talk")
@@ -20,12 +21,10 @@ def test_presenter_frames_are_deterministic_and_transparent():
     assert first.getbbox() is not None
     assert BRAND["character"] == "Stack"
 
-
 def test_presenter_expressions_change_visual_output():
     assert build_presenter_frame(1, expression="talk").tobytes() != build_presenter_frame(
         1, expression="surprised"
     ).tobytes()
-
 
 def test_asset_registration_copies_and_hash_verifies(tmp_path):
     source = tmp_path / "capture.png"
@@ -40,6 +39,22 @@ def test_asset_registration_copies_and_hash_verifies(tmp_path):
     assert verify_asset(project, "chatgpt-home")
     assert (project / "assets" / "chatgpt-home.png").read_bytes() == source.read_bytes()
 
+def test_asset_registration_rejects_media_type_mismatch(tmp_path):
+    image = tmp_path / "capture.png"
+    Image.new("RGB", (4, 4)).save(image)
+    with pytest.raises(SoloStackAssetError, match="Image files"):
+        register_asset(
+            image, tmp_path / "episode", asset_id="bad-image",
+            product="ChatGPT", asset_type="screen_recording",
+        )
+
+    video = tmp_path / "capture.mp4"
+    video.write_bytes(b"\x00\x00\x00\x18ftypisom0000")
+    with pytest.raises(SoloStackAssetError, match="Video files"):
+        register_asset(
+            video, tmp_path / "episode", asset_id="bad-video",
+            product="ChatGPT", asset_type="screenshot",
+        )
 
 def test_asset_registration_rejects_symlink_and_oversized_file(tmp_path):
     source = tmp_path / "real.png"
@@ -51,7 +66,6 @@ def test_asset_registration_rejects_symlink_and_oversized_file(tmp_path):
     with pytest.raises(SoloStackAssetError):
         validate_source_url("file:///etc/passwd")
 
-
 def test_asset_registration_rejects_duplicate_id(tmp_path):
     source = tmp_path / "capture.webp"
     Image.new("RGB", (2, 2)).save(source)
@@ -59,7 +73,6 @@ def test_asset_registration_rejects_duplicate_id(tmp_path):
     register_asset(source, project, asset_id="one", product="Canva", asset_type="screenshot")
     with pytest.raises(SoloStackAssetError):
         register_asset(source, project, asset_id="one", product="Canva", asset_type="screenshot")
-
 
 def test_evidence_requires_source_and_checked_date(tmp_path):
     project = tmp_path / "episode"
@@ -79,6 +92,40 @@ def test_evidence_requires_source_and_checked_date(tmp_path):
             source_url="https://example.com", publisher="Example", checked_at="yesterday",
         )
 
+def test_evidence_lookup_is_product_scoped_and_marks_stale_records(tmp_path):
+    today = date.today()
+    project = tmp_path / "evidence"
+    add_evidence(
+        project, claim_id="chatgpt-current", product="ChatGPT",
+        claim="Current plan information recorded by the operator.",
+        source_url="https://chatgpt.com/pricing/?campaign=private",
+        publisher="OpenAI", checked_at=today.isoformat(),
+        value="Current observed value", plan="Free",
+    )
+    add_evidence(
+        project, claim_id="chatgpt-stale", product="ChatGPT",
+        claim="Older plan information.",
+        source_url="https://chatgpt.com/pricing/",
+        publisher="OpenAI",
+        checked_at=(today - timedelta(days=31)).isoformat(),
+        value="Older observed value", plan="Free",
+    )
+    add_evidence(
+        project, claim_id="canva-current", product="Canva",
+        claim="Unrelated product evidence.",
+        source_url="https://www.canva.com/pricing/",
+        publisher="Canva", checked_at=today.isoformat(),
+    )
+
+    records = evidence_for_products(project, ["chatgpt"])
+    assert {record["claim_id"] for record in records} == {
+        "chatgpt-current", "chatgpt-stale"
+    }
+    current = next(record for record in records if record["claim_id"] == "chatgpt-current")
+    stale = next(record for record in records if record["claim_id"] == "chatgpt-stale")
+    assert current["is_current"] is True
+    assert stale["is_current"] is False
+    assert current["source_url"] == "https://chatgpt.com/pricing/"
 
 def test_manifest_tampering_is_detected(tmp_path):
     source = tmp_path / "capture.jpg"
@@ -88,7 +135,6 @@ def test_manifest_tampering_is_detected(tmp_path):
     Image.new("RGB", (2, 2), (40, 50, 60)).save(project / "assets" / "one.jpg")
     assert not verify_asset(project, "one")
 
-
 def test_asset_registration_rejects_fake_image_bytes(tmp_path):
     source = tmp_path / "not-an-image.png"
     source.write_bytes(b"not really a png")
@@ -97,7 +143,6 @@ def test_asset_registration_rejects_fake_image_bytes(tmp_path):
             source, tmp_path / "episode", asset_id="fake",
             product="Tool", asset_type="screenshot",
         )
-
 
 def test_presenter_overlay_composes_with_existing_video_clip():
     from moviepy import ColorClip
@@ -110,16 +155,12 @@ def test_presenter_overlay_composes_with_existing_video_clip():
     assert result.get_frame(0.5).shape == (360, 640, 3)
     result.close()
 
-
-
 def test_presenter_supports_episode_specific_actions_and_wardrobes():
     base = build_presenter_frame(0.8, expression="curious", action="question")
     reaction = build_presenter_frame(0.8, expression="surprised", action="react")
     smart = build_presenter_frame(0.8, expression="skeptical", action="lean", wardrobe="smart")
     assert base.size == reaction.size == smart.size
     assert len({base.tobytes(), reaction.tobytes(), smart.tobytes()}) == 3
-
-
 
 def test_solo_stack_presenter_requires_channel_mode(monkeypatch):
     monkeypatch.setitem(task.config.app, "solo_stack_mode", False)

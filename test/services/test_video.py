@@ -91,6 +91,17 @@ class TestVideoService(unittest.TestCase):
         vd._runtime_disabled_video_codecs.clear()
         vd._ffmpeg_encoder_exists.cache_clear()
 
+    def test_presenter_selection_alternates_labelled_scenes_not_raw_clip_indices(self):
+        """The first eligible scene gets the host even when an evidence clip precedes it."""
+        labels = {
+            1: "ChatGPT workflow",
+            2: "ChatGPT workflow repeated source",
+            5: "Pricing comparison",
+            7: "Final verdict",
+        }
+        self.assertEqual(vd._select_presenter_scene_indices(labels), {1, 5})
+
+
     def test_clip_processing_concurrency_defaults_to_serial(self):
         """未配置或配置无效时保持串行，显式设置仍可在安全范围内生效。"""
         with patch.dict(config.app, {}, clear=True):

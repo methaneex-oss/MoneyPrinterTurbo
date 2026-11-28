@@ -53,3 +53,27 @@ To add tests for other components, follow these guidelines:
 ## Test Resources
 
 Place any resource files required for testing in the `test/resources` directory.
+
+
+## Complete repository test runner
+
+From the repository root, run the full collected automated suite (including the Solo Stack feature tests):
+
+```bash
+python scripts/run_full_test_suite.py
+```
+
+Optional modes:
+
+```bash
+# Include provider-backed integration tests (may use network/API credentials)
+python scripts/run_full_test_suite.py --integration
+
+# Run with coverage
+python scripts/run_full_test_suite.py --coverage
+
+# Save a machine-readable report
+python scripts/run_full_test_suite.py --junitxml=artifacts/test-results.xml
+```
+
+The default run is offline/safe and does not enable provider-backed integration tests. GPU/model-server checks remain environment-dependent and must be run on a compatible runtime; a passing unit suite does not certify those external services.

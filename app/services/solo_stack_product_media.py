@@ -13,8 +13,11 @@ import logging
 import re
 import subprocess
 from datetime import datetime, timezone
+from html.parser import HTMLParser
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, quote_plus, unquote, urlparse
+
+import requests
 
 from PIL import Image, ImageDraw, ImageFont
 
@@ -143,6 +146,18 @@ PRODUCTS = {
         "url": "https://github.com/features/copilot",
         "domain": "github.com",
     },
+    "Claude Code": {
+        "aliases": ("claude code", "claude-code", "anthropic claude code"),
+        "url": "https://claude.com/product/claude-code",
+        "domain": "claude.com",
+    },
+    "llama.cpp": {
+        "aliases": ("llama.cpp", "llama cpp", "ggml llama.cpp"),
+        "url": "https://github.com/ggml-org/llama.cpp",
+        "domain": "github.com",
+        "source_label": "OFFICIAL PROJECT PAGE",
+        "asset_type": "official_project_page_capture",
+    },
 }
 _IMAGE_HINTS = re.compile(
     r"(app|interface|screen|editor|dashboard|chat|design|document|workflow|product|feature)",
@@ -152,20 +167,304 @@ _MAX_IMAGE_BYTES = 18 * 1024 * 1024
 _MAX_IMAGES_PER_PRODUCT = 2
 
 
+_PRODUCT_LABEL_STOPWORDS = {
+    "a", "an", "and", "app", "apps", "best", "business", "businesses",
+    "comparison", "compare", "for", "freelancer", "freelancers", "from",
+    "in", "of", "on", "or", "review", "small", "software", "the", "tool",
+    "tools", "versus", "vs", "with", "use",
+}
+_PRODUCT_GENERIC_NAMES = {
+    "AI", "API", "CEO", "DIY", "FAQ", "I", "PDF", "SEO", "UI", "UX", "URL",
+    "USA", "YOUTUBE", "SOLO STACK", "STACK", "MONEYPRINTERTURBO",
+    "MONEY PRINTER TURBO",
+}
+_SCRIPT_SENTENCE_START_STOPWORDS = {
+    "a", "an", "and", "but", "for", "here", "how", "if", "it", "now", "our",
+    "so", "the", "their", "they", "this", "today", "first", "second",
+    "next", "finally", "meet", "imagine", "introducing", "we", "what", "when",
+    "where", "which", "who", "why", "you", "your", "use", "would", "can",
+    "could", "should", "does", "did", "is", "are", "do", "will", "let",
+}
+
+
+def _clean_product_label(value: str) -> str:
+    value = re.sub(
+        r"^(?:compare|comparing|review|reviewing|versus|vs\.?|between)\s+",
+        "", str(value or "").strip(), flags=re.I,
+    )
+    for marker in (":", " — ", " – ", " such as ", " like "):
+        if marker in value:
+            value = value.rsplit(marker, 1)[-1]
+    value = re.split(
+        r"\s+(?:for|among|between|in|with|when|as)\s+",
+        value, maxsplit=1, flags=re.I,
+    )[0]
+    value = re.sub(
+        r"\s+(?:review|comparison|software|apps?|tools?|chat|assistant)$", "",
+        value, flags=re.I,
+    )
+    value = value.strip(" \t\r\n:;,.-!?()[]{}'\"")
+    words = value.split()
+    # Strip sentence-leading verbs that generic extraction may capture.
+    while words and words[0].casefold() in _SCRIPT_SENTENCE_START_STOPWORDS:
+        words.pop(0)
+    value = " ".join(words)
+    if not words or len(words) > 4:
+        return ""
+    if all(word.casefold() in _PRODUCT_LABEL_STOPWORDS for word in words):
+        return ""
+    return value
+
+
+def _comparison_subject_products(subject: str) -> list[str]:
+    text = str(subject or "").strip()
+    patterns = (
+        r"\s+\bvs\.?\s+",
+        r"\s+\bversus\s+",
+        r"\s+\bcompared\s+with\s+",
+        r"\s+\bagainst\s+",
+        r"^\s*between\s+(.+?)\s+\band\b\s+(.+?)\s*$",
+    )
+    pieces = None
+    for pattern in patterns:
+        match = re.search(pattern, text, flags=re.I)
+        if match:
+            if pattern.startswith("^"):
+                pieces = [match.group(1), match.group(2)]
+            else:
+                pieces = re.split(pattern, text, maxsplit=1, flags=re.I)
+            break
+    if not pieces:
+        return []
+    labels = [_clean_product_label(piece) for piece in pieces]
+    return list(dict.fromkeys(label for label in labels if label))
+
+
+def _script_named_product_candidates(text: str) -> list[str]:
+    """Conservative, dependency-free candidate extraction for named software."""
+    candidates = []
+    for sentence_match in re.finditer(r"[^.!?\n]+", str(text or "")):
+        sentence = sentence_match.group(0)
+        patterns = (
+            r"(?<![A-Za-z0-9])(?:[A-Z][A-Za-z0-9.+#-]*)(?:\s+[A-Z][A-Za-z0-9.+#-]*){0,2}",
+            r"(?<![A-Za-z0-9])[a-z][a-z0-9-]*\.(?:com|io|app|ai|co|org)(?![A-Za-z0-9])",
+            r"(?<![A-Za-z0-9])(?:n\d+n)(?![A-Za-z0-9])",
+        )
+        for pattern in patterns:
+            for match in re.finditer(pattern, sentence):
+                label = _clean_product_label(match.group(0))
+                if not label or label.upper() in _PRODUCT_GENERIC_NAMES:
+                    continue
+                if match.start() == 0:
+                    first_word = label.split()[0].casefold()
+                    if first_word in _SCRIPT_SENTENCE_START_STOPWORDS:
+                        continue
+                candidates.append((sentence_match.start() + match.start(), label))
+    candidates.sort(key=lambda item: item[0])
+    return list(dict.fromkeys(label for _, label in candidates))
+
+
 def identify_products(subject: str, script: str, terms=None, limit: int = 3) -> list[str]:
-    """Return supported products actually named in the episode, in mention order."""
+    """Identify episode software names without requiring a fixed catalogue."""
+    maximum = max(0, min(5, int(limit)))
+    if maximum == 0:
+        return []
     if isinstance(terms, str):
         terms = [terms]
     elif terms is None:
         terms = []
-    text = " ".join([subject or "", script or "", *terms]).casefold()
-    matches = []
+    text = " ".join([subject or "", script or "", *[str(term) for term in terms]])
+    candidates = []
+    # Curated aliases improve precision but never limit discovery to known apps.
+    catalog_matches = []
     for name, item in PRODUCTS.items():
-        positions = [text.find(alias.casefold()) for alias in item["aliases"]]
-        positions = [position for position in positions if position >= 0]
-        if positions:
-            matches.append((min(positions), name))
-    return [name for _, name in sorted(matches)[:max(0, min(5, limit))]]
+        for alias in item["aliases"]:
+            pattern = re.compile(
+                r"(?<![a-z0-9])" + re.escape(alias.casefold()) + r"(?![a-z0-9])",
+                re.I,
+            )
+            match = pattern.search(text)
+            if match:
+                catalog_matches.append((match.start(), match.end(), name, len(alias)))
+    # Prefer a full branded name over a shorter alias contained in it
+    # ("Claude Code" should not also be emitted as "Claude").
+    for start, end, name, alias_length in catalog_matches:
+        if any(
+            other_start <= start and other_end >= end and other_length > alias_length
+            for other_start, other_end, _other_name, other_length in catalog_matches
+        ):
+            continue
+        candidates.append((start, name))
+    # Comparison titles explicitly identify the intended products.
+    for index, name in enumerate(_comparison_subject_products(subject)):
+        candidates.append((-100 + index, name))
+    # Generic capitalized-phrase extraction can span multiple catalogued
+    # names (e.g. "Canva AI ChatGPT"). Drop those compound candidates; the
+    # catalog alias matches already preserve the individual names and order.
+    generic_candidates = _script_named_product_candidates(
+        " ".join([script or "", *[str(term) for term in terms]])
+    )
+    for name in generic_candidates:
+        if any(
+            re.search(
+                r"(?<![a-z0-9])" + re.escape(alias.casefold()) + r"(?![a-z0-9])",
+                name.casefold(),
+            )
+            for item in PRODUCTS.values() for alias in item["aliases"]
+        ):
+            continue
+        position = text.casefold().find(name.casefold())
+        candidates.append((position if position >= 0 else len(text), name))
+
+    selected = []
+    for _position, name in sorted(candidates, key=lambda item: item[0]):
+        cleaned = _clean_product_label(name)
+        if cleaned and cleaned.casefold() not in {
+            item.casefold() for item in selected
+        }:
+            selected.append(cleaned)
+        if len(selected) >= maximum:
+            break
+    return selected
+
+
+class _DuckDuckGoResultParser(HTMLParser):
+    def __init__(self):
+        super().__init__()
+        self.results = []
+        self._active = None
+
+    def handle_starttag(self, tag, attrs):
+        attributes = dict(attrs)
+        classes = set(attributes.get("class", "").split())
+        if tag == "a" and "result__a" in classes:
+            self._active = {"href": attributes.get("href", ""), "title": ""}
+
+    def handle_data(self, data):
+        if self._active is not None:
+            self._active["title"] += data
+
+    def handle_endtag(self, tag):
+        if tag == "a" and self._active is not None:
+            self.results.append(self._active)
+            self._active = None
+
+
+_BLOCKED_DISCOVERY_HOSTS = {
+    "facebook.com", "instagram.com", "linkedin.com", "pinterest.com",
+    "reddit.com", "tiktok.com", "wikipedia.org", "x.com", "youtube.com",
+}
+
+
+def _official_source_from_wikidata(product: str) -> dict | None:
+    headers = {"User-Agent": "SoloStackVisualResearch/1.0 (public source discovery)"}
+    response = requests.get(
+        "https://www.wikidata.org/w/api.php",
+        params={
+            "action": "wbsearchentities", "search": product, "language": "en",
+            "format": "json", "type": "item", "limit": 6,
+        },
+        headers=headers, timeout=(8, 18),
+    )
+    response.raise_for_status()
+    results = response.json().get("search", [])
+    for result in results:
+        label = str(result.get("label") or "").strip()
+        if label.casefold() != product.casefold():
+            continue
+        entity_id = result.get("id")
+        if not entity_id:
+            continue
+        entity_response = requests.get(
+            "https://www.wikidata.org/w/api.php",
+            params={
+                "action": "wbgetentities", "ids": entity_id,
+                "props": "claims", "format": "json",
+            },
+            headers=headers, timeout=(8, 18),
+        )
+        entity_response.raise_for_status()
+        entity = entity_response.json().get("entities", {}).get(entity_id, {})
+        for claim in entity.get("claims", {}).get("P856", []):
+            value = claim.get("mainsnak", {}).get("datavalue", {}).get("value")
+            if isinstance(value, str):
+                parsed = urlparse(value)
+                if parsed.scheme == "https" and parsed.hostname:
+                    return {
+                        "url": value,
+                        "domain": parsed.hostname.casefold().removeprefix("www."),
+                        "discovery_method": "wikidata_official_website_property",
+                        "entity_label": label,
+                    }
+    return None
+
+
+def _official_source_from_search(product: str) -> dict | None:
+    query = quote_plus(f"{product} official website software app")
+    response = requests.get(
+        f"https://html.duckduckgo.com/html/?q={query}",
+        headers={"User-Agent": "Mozilla/5.0 (compatible; SoloStackVisualResearch/1.0)"},
+        timeout=(8, 18),
+    )
+    response.raise_for_status()
+    parser = _DuckDuckGoResultParser()
+    parser.feed(response.text)
+    product_tokens = {
+        token.casefold() for token in re.findall(r"[a-z0-9]+", product)
+        if len(token) > 1
+    }
+    for result in parser.results:
+        href = unquote(str(result.get("href") or ""))
+        parsed = urlparse(href)
+        if "duckduckgo.com" in (parsed.hostname or ""):
+            target = parse_qs(parsed.query).get("uddg", [])
+            href = target[0] if target else ""
+            parsed = urlparse(href)
+        host = (parsed.hostname or "").casefold()
+        if parsed.scheme != "https" or not host:
+            continue
+        if any(
+            host == blocked or host.endswith("." + blocked)
+            for blocked in _BLOCKED_DISCOVERY_HOSTS
+        ):
+            continue
+        title = str(result.get("title") or "").casefold()
+        host_parts = host.removeprefix("www.").split(".")
+        if (
+            len(host_parts) >= 3
+            and len(host_parts[-1]) == 2
+            and host_parts[-2] in {"co", "com", "org", "net", "gov", "ac"}
+        ):
+            registered_label = host_parts[-3]
+        else:
+            registered_label = host_parts[-2] if len(host_parts) > 1 else host_parts[0]
+        host_label = registered_label.replace("-", " ")
+        haystack = title + " " + host_label
+        overlap = sum(1 for token in product_tokens if token in haystack)
+        if product_tokens and overlap / len(product_tokens) < 0.5:
+            continue
+        return {
+            "url": href,
+            "domain": host.removeprefix("www."),
+            "discovery_method": "duckduckgo_result_candidate",
+            "entity_label": product,
+        }
+    return None
+
+
+def discover_official_product_source(product: str) -> dict | None:
+    """Resolve an episode product's public official site at runtime."""
+    try:
+        source = _official_source_from_wikidata(product)
+        if source:
+            return source
+    except (requests.RequestException, ValueError, TypeError, KeyError) as exc:
+        logger.debug("Wikidata discovery failed for %s: %s", product, exc)
+    try:
+        return _official_source_from_search(product)
+    except (requests.RequestException, ValueError, TypeError) as exc:
+        logger.warning("Official-source discovery failed for %s: %s", product, exc)
+        return None
 
 
 def interleave_product_visuals(existing_clips: list[str], product_clips: list[str]) -> list[str]:
@@ -196,7 +495,9 @@ def _safe_image_extension(url: str, content_type: str) -> str | None:
     }.get(content_type.split(";", 1)[0].strip().lower())
 
 
-def _download_page_images(page, destination: Path) -> list[tuple[Path, str]]:
+def _download_page_images(
+    page, destination: Path, allowed_domain: str
+) -> list[tuple[Path, str]]:
     candidates = page.locator("img").evaluate_all(
         """els => els.map((img, index) => ({
           src: img.currentSrc || img.src || '',
@@ -225,7 +526,16 @@ def _download_page_images(page, destination: Path) -> list[tuple[Path, str]]:
         if item["src"].startswith("https://")
         and item["width"] >= 320 and item["height"] >= 160
         and _safe_image_extension(item["src"], "image/png") is not None
-        and (_IMAGE_HINTS.search(item["alt"]) or _IMAGE_HINTS.search(urlparse(item["src"]).path))
+        and (
+            _IMAGE_HINTS.search(item["alt"])
+            or _IMAGE_HINTS.search(urlparse(item["src"]).path)
+        )
+        and (
+            urlparse(item["src"]).hostname == allowed_domain
+            or (
+                urlparse(item["src"]).hostname or ""
+            ).endswith("." + allowed_domain)
+        )
     ]
     candidates.sort(
         key=lambda item: (
@@ -297,8 +607,17 @@ def _make_editorial_card(
         radius=6, fill="#46D3E7",
     )
     panel_w = size[0] - margin * 2
-    panel_h = 640 if portrait else 760
-    panel_y = 600 if portrait else 190
+    if portrait:
+        # A portrait operator capture should use the available vertical canvas,
+        # not be shrunk into the same shallow landscape card as a desktop image.
+        with Image.open(source) as source_image:
+            source_ratio = source_image.width / max(1, source_image.height)
+        if source_ratio < 1.15:
+            panel_y, panel_h = 250, 1320
+        else:
+            panel_y, panel_h = 600, 640
+    else:
+        panel_h, panel_y = 760, 190
     image = _fit_image(source, (panel_w - 28, panel_h - 28))
     canvas.paste(image, (margin + 14, panel_y + 14))
     draw.rounded_rectangle(
@@ -351,6 +670,26 @@ def _render_video_capture_clip(
         "-movflags", "+faststart", str(output),
     ]
     subprocess.run(command, check=True, capture_output=True, timeout=120)
+
+
+def _product_visual_coverage(products: list[str], assets: list[dict]) -> list[dict]:
+    coverage = []
+    for product in products:
+        product_assets = [
+            asset for asset in assets
+            if str(asset.get("product") or "").casefold() == product.casefold()
+            and str(asset.get("asset_type") or "").casefold() != "logo"
+        ]
+        coverage.append({
+            "product": product,
+            "visual_count": len(product_assets),
+            "sources": sorted({
+                str(asset.get("asset_type") or "unknown")
+                for asset in product_assets
+            }),
+            "status": "available" if product_assets else "missing",
+        })
+    return coverage
 
 
 def prepare_episode_product_visuals(
@@ -466,6 +805,8 @@ def prepare_episode_product_visuals(
             material_records.append({
                 "local_file": clip.name,
                 "search_term": f"{product} real app screen capture",
+                "source_kind": "solo_stack_product_evidence",
+                "product": product,
             })
 
         user_capture_counts[product] = rendered_count
@@ -477,8 +818,23 @@ def prepare_episode_product_visuals(
         product for product in products
         if user_capture_counts.get(product, 0) < _MAX_IMAGES_PER_PRODUCT
     ]
+    # Resolve each named product at runtime. The curated catalogue is only a
+    # compatibility fallback for products absent from public entity indexes.
+    source_specs = {}
+    for product in products_needing_public_visuals:
+        source_specs[product] = discover_official_product_source(product)
+        if not source_specs[product]:
+            source_specs[product] = PRODUCTS.get(product)
+        if not source_specs[product]:
+            logger.warning(
+                "No trustworthy official public source discovered for %s", product
+            )
+    products_with_public_sources = [
+        product for product in products_needing_public_visuals
+        if source_specs.get(product)
+    ]
     sync_playwright = None
-    if products_needing_public_visuals:
+    if products_with_public_sources:
         try:
             from playwright.sync_api import sync_playwright
         except ImportError as exc:
@@ -497,23 +853,25 @@ def prepare_episode_product_visuals(
                 browser = playwright.chromium.launch(headless=True, args=["--no-sandbox"])
                 try:
                     page = browser.new_page(
-                        viewport={"width": 1440, "height": 900},
+                        viewport={"width": 1080, "height": 1920},
                         device_scale_factor=1,
                         locale="en-US",
                     )
-                    for product in products_needing_public_visuals:
+                    for product in products_with_public_sources:
                         remaining = _MAX_IMAGES_PER_PRODUCT - user_capture_counts.get(product, 0)
                         if remaining <= 0:
                             continue
                         try:
-                            spec = PRODUCTS[product]
+                            spec = source_specs.get(product)
+                            if not spec:
+                                continue
                             product_dir = media_dir / re.sub(
                                 r"[^a-z0-9]+", "-", product.casefold()
                             ).strip("-")
                             product_dir.mkdir(parents=True, exist_ok=True)
                             page.goto(spec["url"], wait_until="domcontentloaded", timeout=45000)
                             page.wait_for_timeout(2500)
-                            page.evaluate("window.scrollTo(0, Math.min(650, document.body.scrollHeight))")
+                            page.evaluate("window.scrollTo(0, 0)")
                             page.wait_for_timeout(900)
                             source_page = page.url
                             parsed = urlparse(source_page)
@@ -527,7 +885,32 @@ def prepare_episode_product_visuals(
                                 )
                                 continue
 
-                            images = _download_page_images(page, product_dir)[:remaining]
+                            if spec.get("discovery_method") == "duckduckgo_result_candidate":
+                                page_identity = (
+                                    page.title() + " " +
+                                    str(page.locator("meta[name='description']").get_attribute("content") or "")
+                                ).casefold()
+                                product_tokens = [
+                                    token.casefold()
+                                    for token in re.findall(r"[a-z0-9]+", product)
+                                    if len(token) > 1
+                                ]
+                                identity_matches = sum(
+                                    1 for token in product_tokens
+                                    if token in page_identity
+                                )
+                                if product_tokens and (
+                                    identity_matches / len(product_tokens) < 0.5
+                                ):
+                                    logger.warning(
+                                        "Search candidate page identity did not match %s",
+                                        product,
+                                    )
+                                    continue
+
+                            images = _download_page_images(
+                                page, product_dir, spec["domain"]
+                            )[:remaining]
                             if not images:
                                 screenshot = product_dir / "official-product-page.png"
                                 page.screenshot(path=str(screenshot), full_page=False)
@@ -545,16 +928,22 @@ def prepare_episode_product_visuals(
                                     f"{product_slug}-product-visual-{image_index}.mp4"
                                 )
                                 _make_editorial_card(
-                                    source_image, card, product, aspect, spec["domain"]
+                                    source_image, card, product, aspect, spec["domain"],
+                                    source_label=spec.get(
+                                        "source_label", "OFFICIAL PRODUCT VISUAL"
+                                    ),
                                 )
                                 _render_still_clip(card, clip, duration, aspect)
                                 digest = hashlib.sha256(source_image.read_bytes()).hexdigest()
                                 manifest["assets"].append({
                                     "product": product,
                                     "asset_type": (
-                                        "official_product_page_image"
-                                        if image_url != source_page
-                                        else "official_product_page_capture"
+                                        spec.get("asset_type")
+                                        or (
+                                            "official_product_page_image"
+                                            if image_url != source_page
+                                            else "official_product_page_capture"
+                                        )
                                     ),
                                     "file": str(source_image.relative_to(task_dir)),
                                     "rendered_clip": str(clip.relative_to(task_dir)),
@@ -562,15 +951,21 @@ def prepare_episode_product_visuals(
                                     "source_asset_url": image_url,
                                     "sha256": digest,
                                     "captured_at": manifest["captured_at"],
+                                    "source_discovery_method": spec.get(
+                                        "discovery_method", "curated_official_source_fallback"
+                                    ),
                                     "note": (
                                         "Public official-site visual; not an authenticated "
-                                        "in-app task recording."
+                                        "in-app task recording. Official source resolution "
+                                        "was performed dynamically for this episode."
                                     ),
                                 })
                                 clips.append(str(clip))
                                 material_records.append({
                                     "local_file": clip.name,
                                     "search_term": f"{product} official product interface",
+                                    "source_kind": "solo_stack_product_evidence",
+                                    "product": product,
                                 })
                         except Exception as exc:
                             logger.warning(
@@ -588,29 +983,38 @@ def prepare_episode_product_visuals(
                 exc,
             )
 
+    product_coverage = _product_visual_coverage(
+        products, manifest["assets"]
+    )
+    manifest["product_coverage"] = product_coverage
+    manifest["missing_products"] = [
+        item["product"] for item in product_coverage
+        if item["status"] == "missing"
+    ]
     manifest_path.write_text(
         json.dumps(manifest, indent=2) + "\n", encoding="utf-8"
     )
-    if material_records:
-        script_path = task_dir / "script.json"
-        try:
-            payload = json.loads(script_path.read_text(encoding="utf-8"))
-            records = payload.setdefault("material_sources", [])
-            existing = {
-                item.get("local_file")
-                for item in records if isinstance(item, dict)
-            }
-            records.extend(
-                item for item in material_records
-                if item["local_file"] not in existing
-            )
-            script_path.write_text(
-                json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
-                encoding="utf-8",
-            )
-        except (OSError, ValueError, TypeError) as exc:
-            logger.warning(
-                "Could not add Solo Stack product visuals to source manifest: %s",
-                exc,
-            )
+    script_path = task_dir / "script.json"
+    try:
+        payload = json.loads(script_path.read_text(encoding="utf-8"))
+        payload["product_visual_coverage"] = product_coverage
+        payload["product_visual_manifest"] = str(manifest_path.relative_to(task_dir))
+        records = payload.setdefault("material_sources", [])
+        existing = {
+            item.get("local_file")
+            for item in records if isinstance(item, dict)
+        }
+        records.extend(
+            item for item in material_records
+            if item["local_file"] not in existing
+        )
+        script_path.write_text(
+            json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+    except (OSError, ValueError, TypeError) as exc:
+        logger.warning(
+            "Could not persist Solo Stack product visual coverage: %s",
+            exc,
+        )
     return clips
