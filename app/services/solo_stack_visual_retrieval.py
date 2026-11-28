@@ -613,7 +613,7 @@ def create_editorial_fallback_clips(
     images_dir, clips_dir = root / "images", root / "clips"
     images_dir.mkdir(parents=True, exist_ok=True)
     clips_dir.mkdir(parents=True, exist_ok=True)
-    sentences = [re.sub(r"\\s+", " ", part).strip() for part in re.split(r"(?<=[.!?])\\s+|\\n+", str(script or ""))]
+    sentences = [re.sub(r"\s+", " ", part).strip() for part in re.split(r"(?<=[.!?])\s+|\n+", str(script or ""))]
     scenes = [s for s in sentences if len(s) > 12][:max(1, min(int(max_scenes), 4))]
     if not scenes:
         scenes = [str(subject or "Solo Stack").strip()]
