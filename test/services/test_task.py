@@ -458,6 +458,9 @@ class TestTaskService(unittest.TestCase):
             ) as plan,
             patch.object(tm.video, "combine_videos") as combine,
             patch.object(tm.video, "generate_video"),
+            patch.object(tm, "inspect_video_quality", return_value={"flags": []}),
+            patch.object(tm, "_solo_stack_product_visual_blockers", return_value=[]),
+            patch.object(tm.task_artifacts, "patch_script_data"),
             patch.object(tm.sm.state, "update_task"),
         ):
             tm.generate_final_videos(
